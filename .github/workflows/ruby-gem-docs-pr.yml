@@ -2,15 +2,19 @@ name: Ruby Gem — Docs PR Check
 
 # Self-contained PR check for Ruby gem docs. Runs on pull requests.
 #
-# Measures the PR head, measures the base branch (checked out in a
-# sidecar) for a before/after diff, runs yardstick verify on the PR,
-# and posts (or updates) a sticky comment. Fails if verify failed on
-# the PR — so merging cannot silently degrade doc coverage.
+# Two jobs:
+#   measure — runs yardstick on the PR head, verifies against the
+#             threshold (soft, so a failure doesn't kill the run
+#             before the comment is posted), measures the base
+#             branch in a sidecar checkout for the before/after
+#             diff, and uploads both reports as intra-run artifacts.
+#   comment — downloads both reports, builds the sticky PR comment
+#             via yardstick_report.rb (fetched from this repo),
+#             posts or updates it, and fails the run if the PR's
+#             verify step failed.
 #
-# No cross-workflow artifact dependency: docs-deploy is responsible
-# only for deploying GitHub Pages and does not need to upload a
-# yardstick baseline. The baseline is produced here, from the live
-# base branch, at every PR run.
+# No cross-workflow artifact dependency: docs-deploy does only the
+# Pages deployment, and does NOT upload any yardstick artifact.
 #
 # The yardstick_report.rb helper lives in this central repo at
 # .github/scripts/ and is fetched via a sidecar checkout.
@@ -26,34 +30,18 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
-  comment:
-    name: Comment on PR
+  measure:
+    name: Measure & verify
     runs-on: ubuntu-latest
+    outputs:
+      verify_outcome: ${{ steps.verify.outcome }}
     steps:
       - name: Checkout PR head
         uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
-      - name: Checkout base branch (for baseline)
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.base_ref }}
-          path: _base_
-          fetch-depth: 1
-
-      - name: Checkout ci-workflows (for yardstick_report.rb)
-        uses: actions/checkout@v6
-        with:
-          repository: fluence-eu/ci-workflows
-          ref: v1
-          path: _ci_workflows_
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+      - uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ inputs.ruby_version }}
           bundler-cache: true
@@ -69,6 +57,13 @@ jobs:
         continue-on-error: true
         run: bundle exec rake doc:verify
 
+      - name: Checkout base branch (for baseline)
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.base_ref }}
+          path: _base_
+          fetch-depth: 1
+
       - name: Measure base branch (yardstick)
         working-directory: _base_
         run: |
@@ -78,6 +73,56 @@ jobs:
           bundle exec rake doc:measure
           cp doc/yardstick_report.txt /tmp/yardstick_base.txt
 
+      - name: Upload PR yardstick report
+        uses: actions/upload-artifact@v7
+        with:
+          name: yardstick-pr
+          path: /tmp/yardstick_pr.txt
+
+      - name: Upload base yardstick report
+        uses: actions/upload-artifact@v7
+        with:
+          name: yardstick-base
+          path: /tmp/yardstick_base.txt
+
+  comment:
+    name: Comment on PR
+    needs: measure
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Checkout ci-workflows (for yardstick_report.rb)
+        uses: actions/checkout@v6
+        with:
+          repository: fluence-eu/ci-workflows
+          ref: v1
+          path: _ci_workflows_
+
+      - name: Download PR yardstick report
+        uses: actions/download-artifact@v8
+        with:
+          name: yardstick-pr
+          path: yardstick-pr/
+
+      - name: Download base yardstick report
+        uses: actions/download-artifact@v8
+        with:
+          name: yardstick-base
+          path: yardstick-base/
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ inputs.ruby_version }}
+          bundler-cache: true
+
       - name: Build comment body
         id: body
         env:
@@ -86,10 +131,10 @@ jobs:
           GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           BODY="$(ruby _ci_workflows_/.github/scripts/yardstick_report.rb \
-                   "${{ steps.verify.outcome }}" \
+                   "${{ needs.measure.outputs.verify_outcome }}" \
                    "origin/${{ github.base_ref }}" \
-                   "/tmp/yardstick_pr.txt" \
-                   "/tmp/yardstick_base.txt")"
+                   "yardstick-pr/yardstick_pr.txt" \
+                   "yardstick-base/yardstick_base.txt")"
 
           {
             echo "body<<EOF"
@@ -118,4 +163,4 @@ jobs:
 
       - name: Fail if yardstick verify failed
         run: |
-          [ "${{ steps.verify.outcome }}" = "success" ]
+          [ "${{ needs.measure.outputs.verify_outcome }}" = "success" ]
