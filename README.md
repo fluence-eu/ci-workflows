@@ -4,27 +4,41 @@ Reusable GitHub Actions workflows shared across [fluence-eu](https://github.com/
 
 **Scope:** **Ruby gem** projects only (`fluence-gateway-client`, `fluence-gateway-auth`, `mosaic-sdk`). The `gateway` application has a different CI shape and keeps its own workflows.
 
-## Phase 1: release pipeline
+## Design: one trigger, one workflow run
 
-Three chained workflows handle the entire release flow. Consumers call only the top-level `ruby-gem-release.yml`; it chains to the other two.
+The release flow is split into **two separate reusable workflows**, each bound to a single event type. Consumers declare two matching workflow files in their own repo — **no job conditions, no ghost skipped runs** in the Actions UI.
+
+| Central workflow | Called by consumer workflow | Trigger |
+|---|---|---|
+| `ruby-gem-prepare-release.yml` | `.github/workflows/prepare-release.yml` | `workflow_dispatch` |
+| `ruby-gem-release.yml` | `.github/workflows/release.yml` | `push` on version file |
+| `ruby-gem-publish.yml` *(standalone)* | — | `workflow_dispatch` on this repo (manual republish) |
+
+Flow:
 
 ```
-ruby-gem-release.yml         ← consumer entry point
-├── prepare (on dispatch)    ← bump version, generate changelog, open release PR
-├── tag (on push to main)    ← detect release merge, create git tag
-└── publish (on tag)
-    └── ruby-gem-github-release.yml   ← create GitHub release, extract changelog
-        └── ruby-gem-publish.yml      ← build gem, push to GitHub Packages, attach asset
+Operator dispatches "Prepare Release PR"
+  └── ruby-gem-prepare-release.yml
+      • bump version
+      • regenerate CHANGELOG.md via git-cliff
+      • open release/vX.Y.Z PR
+
+Release PR merges to main (touches version file)
+  └── ruby-gem-release.yml (single job: Release)
+      • read version from version file
+      • create git tag
+      • create GitHub release with extracted changelog
+      • build gem
+      • push to GitHub Packages
+      • attach gem to release
 ```
 
-## Usage
+## Consumer usage
 
-In each consumer repo, replace the entire `release.yml` + `github-release.yml` + `publish.yml` trio with a single thin file:
-
-### `.github/workflows/release.yml`
+### `.github/workflows/prepare-release.yml`
 
 ```yaml
-name: Release
+name: Prepare Release PR
 
 on:
   workflow_dispatch:
@@ -37,9 +51,27 @@ on:
           - patch
           - minor
           - major
-  # Only trigger on pushes that touch the version file. Without this
-  # paths filter, the workflow fires on every merge to main and shows
-  # in the Actions UI with all jobs skipped for non-release commits.
+
+jobs:
+  prepare:
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-prepare-release.yml@main
+    with:
+      gem_name: my-gem-name                          # must match `<gem_name>.gemspec`
+      version_file: lib/my/gem/version.rb            # file containing `VERSION = '...'`
+      bump: ${{ inputs.bump }}
+    secrets: inherit
+    permissions:
+      contents: read
+```
+
+### `.github/workflows/release.yml`
+
+```yaml
+name: Release
+
+on:
+  # Only fires on pushes that touch the version file — i.e. when the
+  # release PR merges. No trigger, no run, no Actions UI noise.
   push:
     branches: [main]
     paths:
@@ -49,21 +81,20 @@ jobs:
   release:
     uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-release.yml@main
     with:
-      gem_name: my-gem-name                               # must match `<gem_name>.gemspec`
-      version_file: lib/my/gem/version.rb                 # path to file with `VERSION = '...'`
-      bump: ${{ inputs.bump }}
+      gem_name: my-gem-name
+      version_file: lib/my/gem/version.rb
     secrets: inherit
     permissions:
       contents: write
       packages: write
 ```
 
-### Standalone manual republish
+### Manual republish (standalone)
 
-If a release was created but the gem push was skipped or failed, dispatch `ruby-gem-publish.yml` **directly from this repo** (not the consumer):
+If a release tag exists but the gem push failed or was skipped, dispatch `ruby-gem-publish.yml` **directly on this repo**:
 
-1. Go to [Actions → Ruby Gem — Publish to GitHub Packages](https://github.com/fluence-eu/ci-workflows/actions/workflows/ruby-gem-publish.yml) on this repo.
-2. Run workflow with `tag` = `v0.12.0` (for instance) and `gem_name` = `fluence-gateway-client`.
+1. Go to [Actions → Ruby Gem — Publish to GitHub Packages](https://github.com/fluence-eu/ci-workflows/actions/workflows/ruby-gem-publish.yml).
+2. Run workflow with `tag` = `v0.12.0` (for example) and `gem_name` = your gem name.
 
 ## Required secrets and vars
 
@@ -77,11 +108,11 @@ Each consumer repo must expose:
 
 ## Pinning policy
 
-The examples above pin to `@main`. For stricter control, pin to a tag once a `v1` release of this repo exists (e.g. `@v1`). Main is stable on purpose — breaking changes go on `v2/`, `v3/`… branches.
+Examples pin to `@main`. For stricter control, pin to a tag once a `v1` tag of this repo exists (e.g. `@v1`). Main is kept stable on purpose — breaking changes go on `v2/`, `v3/`… branches.
 
 ## Phase 2 (future)
 
-Not yet centralised (variations are still too wide across projects):
+Not yet centralised — variations are still too wide across projects:
 
 - `main.yml` — Ruby matrix. `fluence-gateway-auth` needs an Appraisal+Rails matrix; the others a plain Ruby matrix.
 - `docs.yml` — YARD + yardstick. Differs on `ruby-version` and upload-pages action versions.
