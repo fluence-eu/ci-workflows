@@ -1,23 +1,15 @@
 name: Ruby Gem — Docs PR Check
 
-# Self-contained PR check for Ruby gem docs. Runs on pull requests.
+# Runs on pull requests. Delegates the PR-head measurement to
+# ruby-gem-docs-measure.yml (same reusable used by main-push baseline
+# runs — zero duplication of the measure logic). Then fetches the
+# latest baseline from a main-push `docs-measure.yml` run, posts a
+# sticky PR comment with the before/after diff, and fails if the
+# PR's yardstick verify step failed.
 #
-# Two jobs:
-#   measure — runs yardstick on the PR head, verifies against the
-#             threshold (soft, so a failure doesn't kill the run
-#             before the comment is posted), measures the base
-#             branch in a sidecar checkout for the before/after
-#             diff, and uploads both reports as intra-run artifacts.
-#   comment — downloads both reports, builds the sticky PR comment
-#             via yardstick_report.rb (fetched from this repo),
-#             posts or updates it, and fails the run if the PR's
-#             verify step failed.
-#
-# No cross-workflow artifact dependency: docs-deploy does only the
-# Pages deployment, and does NOT upload any yardstick artifact.
-#
-# The yardstick_report.rb helper lives in this central repo at
-# .github/scripts/ and is fetched via a sidecar checkout.
+# Same baseline pattern as ruby-gem-coverage-pr.yml: the baseline
+# artifact is produced by a dedicated sibling workflow (docs-measure)
+# on push to main, fetched here via the workflow runs API.
 
 on:
   workflow_call:
@@ -27,6 +19,11 @@ on:
         required: false
         type: string
         default: '4.0'
+      measure_workflow_file:
+        description: Consumer workflow filename that uploaded the `yardstick-report` artifact on the base branch (used to find the baseline).
+        required: false
+        type: string
+        default: 'docs-measure.yml'
     secrets:
       FLUENCE_CI_BOT_PRIVATE_KEY:
         description: Private key of the read-only GitHub App used to checkout this central repo as a sidecar (to fetch `yardstick_report.rb`).
@@ -38,56 +35,9 @@ permissions:
 jobs:
   measure:
     name: Measure & verify
-    runs-on: ubuntu-latest
-    outputs:
-      verify_outcome: ${{ steps.verify.outcome }}
-    steps:
-      - name: Checkout PR head
-        uses: actions/checkout@v6
-
-      - uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: ${{ inputs.ruby_version }}
-          bundler-cache: true
-
-      - name: Measure PR (yardstick)
-        run: bundle exec rake doc:measure
-
-      - name: Save PR yardstick report
-        run: cp doc/yardstick_report.txt /tmp/yardstick_pr.txt
-
-      - name: Verify PR threshold (soft — drives the comment)
-        id: verify
-        continue-on-error: true
-        run: bundle exec rake doc:verify
-
-      - name: Checkout base branch (for baseline)
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.base_ref }}
-          path: _base_
-          fetch-depth: 1
-
-      - name: Measure base branch (yardstick)
-        working-directory: _base_
-        run: |
-          # bundler-cache above only installs the PR's gems; install
-          # the base branch's gems here.
-          bundle install --quiet
-          bundle exec rake doc:measure
-          cp doc/yardstick_report.txt /tmp/yardstick_base.txt
-
-      - name: Upload PR yardstick report
-        uses: actions/upload-artifact@v7
-        with:
-          name: yardstick-pr
-          path: /tmp/yardstick_pr.txt
-
-      - name: Upload base yardstick report
-        uses: actions/upload-artifact@v7
-        with:
-          name: yardstick-base
-          path: /tmp/yardstick_base.txt
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-measure.yml@v1
+    with:
+      ruby_version: ${{ inputs.ruby_version }}
 
   comment:
     name: Comment on PR
@@ -96,8 +46,9 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      actions: read
     steps:
-      - name: Checkout PR head
+      - name: Checkout consumer repo
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
@@ -121,13 +72,32 @@ jobs:
       - name: Download PR yardstick report
         uses: actions/download-artifact@v8
         with:
-          name: yardstick-pr
+          name: yardstick-report
           path: yardstick-pr/
 
+      - name: Find latest base-branch run with yardstick report
+        id: base-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_FILE: ${{ inputs.measure_workflow_file }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # `status=success` is silently ignored by the runs endpoint
+          # (success is a conclusion, not a status). Query completed
+          # runs and filter by .conclusion in jq.
+          RUN_ID=$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/${WORKFLOW_FILE}/runs?branch=${BASE_REF}&status=completed&per_page=20" \
+            --jq '[.workflow_runs[] | select(.conclusion == "success")][0].id // ""')
+          echo "id=$RUN_ID" >> "$GITHUB_OUTPUT"
+
       - name: Download base yardstick report
+        if: steps.base-run.outputs.id != ''
+        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
-          name: yardstick-base
+          name: yardstick-report
+          run-id: ${{ steps.base-run.outputs.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           path: yardstick-base/
 
       - name: Set up Ruby
@@ -143,11 +113,16 @@ jobs:
           # the PR head SHA, so each violation row is one-click-navigable.
           GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          PR_REPORT="yardstick-pr/yardstick_report.txt"
+          BASE_REPORT=""
+          if [ -f yardstick-base/yardstick_report.txt ]; then
+            BASE_REPORT="yardstick-base/yardstick_report.txt"
+          fi
+
           BODY="$(ruby _ci_workflows_/.github/scripts/yardstick_report.rb \
                    "${{ needs.measure.outputs.verify_outcome }}" \
                    "origin/${{ github.base_ref }}" \
-                   "yardstick-pr/yardstick_pr.txt" \
-                   "yardstick-base/yardstick_base.txt")"
+                   "$PR_REPORT" "$BASE_REPORT")"
 
           {
             echo "body<<EOF"

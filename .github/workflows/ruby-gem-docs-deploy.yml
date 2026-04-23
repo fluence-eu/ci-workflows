@@ -1,15 +1,12 @@
 name: Ruby Gem — Docs Deploy
 
-# Builds the YARD site of a Ruby gem, uploads the yardstick report
-# as an artifact (baseline consumed by ruby-gem-docs-pr.yml's PR
-# comments), and deploys the site to GitHub Pages.
+# Builds the YARD site of a Ruby gem and deploys the result to
+# GitHub Pages. Single responsibility: just deploy.
 #
-# The yardstick threshold is NOT re-checked here — ruby-gem-docs-pr.yml
-# already gates every PR on verify before merge, so main never drifts
-# below threshold without an explicit direct push. `doc:measure` IS
-# run though, because its output `yardstick_report.txt` is uploaded
-# as an artifact and used as the baseline diff by
-# ruby-gem-docs-pr.yml on pull requests.
+# The yardstick baseline consumed by ruby-gem-docs-pr.yml is
+# produced by a dedicated sibling workflow, ruby-gem-docs-measure.yml,
+# also triggered on push to main — so deploy and measure stay
+# orthogonal.
 
 on:
   workflow_call:
