@@ -1,0 +1,62 @@
+name: Ruby Gem — Publish to GitHub Packages
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Tag to publish (e.g. v0.12.0)
+        required: true
+        type: string
+      gem_name:
+        description: Gem name (must match gemspec filename without extension)
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to publish (e.g. v0.12.0)
+        required: true
+        type: string
+      gem_name:
+        description: Gem name (must match gemspec filename without extension)
+        required: true
+        type: string
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+
+      - name: Build gem
+        run: gem build ${{ inputs.gem_name }}.gemspec
+
+      - name: Configure gem credentials
+        run: |
+          mkdir -p ~/.gem
+          cat > ~/.gem/credentials << EOF
+          ---
+          :github: Bearer ${{ secrets.GITHUB_TOKEN }}
+          EOF
+          chmod 0600 ~/.gem/credentials
+
+      - name: Push to GitHub Packages
+        run: gem push --key github --host https://rubygems.pkg.github.com/fluence-eu ${{ inputs.gem_name }}-*.gem
+
+      - name: Attach gem to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload ${{ inputs.tag }} ${{ inputs.gem_name }}-*.gem --clobber
