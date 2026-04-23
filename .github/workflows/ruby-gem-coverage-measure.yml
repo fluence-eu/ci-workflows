@@ -22,6 +22,11 @@ on:
         required: false
         type: string
         default: '4.0'
+      rake_task:
+        description: Rake task to run for coverage generation (e.g. `spec` for rspec-based gems, `test` for minitest-based gems). Must be the test task only — rubocop already runs in the consumer's build matrix.
+        required: false
+        type: string
+        default: 'spec'
 
 permissions:
   contents: read
@@ -38,8 +43,8 @@ jobs:
           ruby-version: ${{ inputs.ruby_version }}
           bundler-cache: true
 
-      - name: Run the default task (generates coverage/)
-        run: bundle exec rake
+      - name: Run the test task (generates coverage/)
+        run: bundle exec rake ${{ inputs.rake_task }}
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
