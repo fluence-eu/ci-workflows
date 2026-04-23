@@ -23,8 +23,8 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    name: Build & measure
+  measure:
+    name: Measure & verify
     runs-on: ubuntu-latest
     outputs:
       verify_outcome: ${{ steps.verify.outcome }}
@@ -52,7 +52,7 @@ jobs:
 
   comment:
     name: Comment on PR
-    needs: build
+    needs: measure
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -120,7 +120,7 @@ jobs:
           fi
 
           BODY="$(ruby _ci_workflows_/.github/scripts/yardstick_report.rb \
-                   "${{ needs.build.outputs.verify_outcome }}" \
+                   "${{ needs.measure.outputs.verify_outcome }}" \
                    "origin/${{ github.base_ref }}" \
                    "$PR_REPORT" "$BASE_REPORT")"
 
@@ -151,4 +151,4 @@ jobs:
 
       - name: Fail if yardstick verify failed
         run: |
-          [ "${{ needs.build.outputs.verify_outcome }}" = "success" ]
+          [ "${{ needs.measure.outputs.verify_outcome }}" = "success" ]
