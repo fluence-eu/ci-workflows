@@ -82,12 +82,13 @@ jobs:
     uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-release.yml@main
     with:
       gem_name: my-gem-name
-      version_file: lib/my/gem/version.rb
     secrets: inherit
     permissions:
       contents: write
       packages: write
 ```
+
+> The release workflow reads the version via `Gem::Specification.load('<gem_name>.gemspec').version` — the same source of truth `gem build` uses. No assumption on the file path, the constant name, or the quote style. Only `gem_name` is needed.
 
 ### Manual republish (standalone)
 

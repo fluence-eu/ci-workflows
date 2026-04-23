@@ -7,10 +7,6 @@ on:
         description: Gem name (must match gemspec filename without extension)
         required: true
         type: string
-      version_file:
-        description: Path to the Ruby file containing `VERSION = '...'`
-        required: true
-        type: string
 
 jobs:
   release:
@@ -32,14 +28,14 @@ jobs:
           ruby-version: '3.4'
           bundler-cache: true
 
-      - name: Get version from file
+      - name: Get version from gemspec
         id: version
         env:
-          VERSION_FILE: ${{ inputs.version_file }}
+          GEM_NAME: ${{ inputs.gem_name }}
         run: |
-          VERSION=$(sed -n "s/.*VERSION = '\([^']*\)'.*/\1/p" "$VERSION_FILE")
+          VERSION=$(ruby -e "puts Gem::Specification.load('${GEM_NAME}.gemspec').version")
           if [[ -z "$VERSION" ]]; then
-            echo "ERROR: could not read VERSION from $VERSION_FILE" >&2
+            echo "ERROR: could not load version from ${GEM_NAME}.gemspec" >&2
             exit 1
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
