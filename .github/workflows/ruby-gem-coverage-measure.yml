@@ -1,0 +1,49 @@
+name: Ruby Gem — Coverage Measure
+
+# Runs the gem's default rake task (typically rspec with SimpleCov
+# enabled) and uploads the resulting `coverage/` folder as the
+# `coverage` artifact.
+#
+# Called from two places:
+# - the consumer's `coverage-measure.yml` on push to main, to produce
+#   the baseline artifact used by ruby-gem-coverage-pr.yml,
+# - ruby-gem-coverage-pr.yml on pull_request, to measure the PR head
+#   (no duplication: same reusable, same behaviour).
+#
+# Mirrors ruby-gem-docs-measure.yml's shape — the two workflows share
+# the same measure/compare pattern and the same set of consumer thin
+# callers.
+
+on:
+  workflow_call:
+    inputs:
+      ruby_version:
+        description: Ruby version for the runner
+        required: false
+        type: string
+        default: '4.0'
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    name: Measure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ inputs.ruby_version }}
+          bundler-cache: true
+
+      - name: Run the default task (generates coverage/)
+        run: bundle exec rake
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage/
+          include-hidden-files: true

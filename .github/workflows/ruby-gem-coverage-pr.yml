@@ -1,19 +1,16 @@
 name: Ruby Gem — Coverage PR Check
 
-# Posts (or updates) a sticky coverage comment on a pull request,
-# comparing the PR's coverage to the latest successful run on the
-# base branch. Fails if undercover flagged new uncovered code.
+# Runs on pull requests. Delegates the PR-head measurement to
+# ruby-gem-coverage-measure.yml (same reusable used by main-push
+# baseline runs — zero duplication of the measure logic). Then
+# fetches the latest baseline from a main-push `coverage-measure.yml`
+# run, runs undercover against the baseline, posts a sticky PR
+# comment with the diff, and fails if undercover flagged new
+# uncovered code.
 #
-# Two jobs:
-#   check   — runs undercover (PR resultset + main baseline) and
-#             exposes the outcome as an output.
-#   comment — needs check. Runs coverage_report.rb, posts or
-#             updates the sticky comment, fails the run if check
-#             failed.
-#
-# The PR-side coverage artifact must be uploaded by a caller job
-# (typically the build matrix of the consumer's main.yml) earlier
-# in the same workflow run.
+# Mirrors ruby-gem-docs-pr.yml's shape — the two workflows share the
+# same measure/compare pattern and the same set of consumer thin
+# callers.
 
 on:
   workflow_call:
@@ -23,11 +20,11 @@ on:
         required: false
         type: string
         default: '4.0'
-      workflow_file:
+      measure_workflow_file:
         description: Consumer workflow filename that uploaded the `coverage` artifact on the base branch (used to find the baseline).
         required: false
         type: string
-        default: 'main.yml'
+        default: 'coverage-measure.yml'
       include_files:
         description: undercover --include-files glob (files considered for coverage).
         required: false
@@ -47,72 +44,15 @@ permissions:
   contents: read
 
 jobs:
-  check:
-    name: Check
-    runs-on: ubuntu-latest
-    outputs:
-      coverage_outcome: ${{ steps.coverage.outcome }}
-    steps:
-      - name: Checkout consumer repo
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: ${{ inputs.ruby_version }}
-          bundler-cache: true
-
-      - name: Download coverage artifact (this run)
-        uses: actions/download-artifact@v8
-        with:
-          name: coverage
-          path: coverage/
-
-      - name: Find latest base-branch run with coverage artifact
-        id: base-run
-        env:
-          GH_TOKEN: ${{ github.token }}
-          WORKFLOW_FILE: ${{ inputs.workflow_file }}
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          RUN_ID=$(gh api \
-            "repos/${{ github.repository }}/actions/workflows/${WORKFLOW_FILE}/runs?branch=${BASE_REF}&status=success&per_page=1" \
-            --jq '.workflow_runs[0].id // ""')
-          echo "id=$RUN_ID" >> "$GITHUB_OUTPUT"
-
-      - name: Download base coverage artifact
-        if: steps.base-run.outputs.id != ''
-        continue-on-error: true
-        uses: actions/download-artifact@v8
-        with:
-          name: coverage
-          run-id: ${{ steps.base-run.outputs.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: coverage-base/
-
-      - name: Check coverage
-        id: coverage
-        continue-on-error: true
-        env:
-          INCLUDE_FILES: ${{ inputs.include_files }}
-          EXCLUDE_FILES: ${{ inputs.exclude_files }}
-        run: |
-          set -o pipefail
-          EXCLUDE_ARG=""
-          if [ -n "$EXCLUDE_FILES" ]; then
-            EXCLUDE_ARG="--exclude-files $EXCLUDE_FILES"
-          fi
-          bundle exec undercover \
-            --compare origin/${{ github.base_ref }} \
-            --include-files "$INCLUDE_FILES" \
-            $EXCLUDE_ARG \
-            --simplecov coverage/coverage.json | tee /tmp/undercover.txt
+  measure:
+    name: Measure
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-measure.yml@v1
+    with:
+      ruby_version: ${{ inputs.ruby_version }}
 
   comment:
     name: Comment on PR
-    needs: check
+    needs: measure
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -146,7 +86,7 @@ jobs:
           ruby-version: ${{ inputs.ruby_version }}
           bundler-cache: true
 
-      - name: Download coverage artifact (this run)
+      - name: Download PR coverage artifact
         uses: actions/download-artifact@v8
         with:
           name: coverage
@@ -156,12 +96,15 @@ jobs:
         id: base-run
         env:
           GH_TOKEN: ${{ github.token }}
-          WORKFLOW_FILE: ${{ inputs.workflow_file }}
+          WORKFLOW_FILE: ${{ inputs.measure_workflow_file }}
           BASE_REF: ${{ github.base_ref }}
         run: |
+          # `status=success` is silently ignored by the runs endpoint
+          # (success is a conclusion, not a status). Query completed
+          # runs and filter by .conclusion in jq.
           RUN_ID=$(gh api \
-            "repos/${{ github.repository }}/actions/workflows/${WORKFLOW_FILE}/runs?branch=${BASE_REF}&status=success&per_page=1" \
-            --jq '.workflow_runs[0].id // ""')
+            "repos/${{ github.repository }}/actions/workflows/${WORKFLOW_FILE}/runs?branch=${BASE_REF}&status=completed&per_page=20" \
+            --jq '[.workflow_runs[] | select(.conclusion == "success")][0].id // ""')
           echo "id=$RUN_ID" >> "$GITHUB_OUTPUT"
 
       - name: Download base coverage artifact
@@ -174,6 +117,24 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: coverage-base/
 
+      - name: Run undercover
+        id: coverage
+        continue-on-error: true
+        env:
+          INCLUDE_FILES: ${{ inputs.include_files }}
+          EXCLUDE_FILES: ${{ inputs.exclude_files }}
+        run: |
+          set -o pipefail
+          EXCLUDE_ARG=""
+          if [ -n "$EXCLUDE_FILES" ]; then
+            EXCLUDE_ARG="--exclude-files $EXCLUDE_FILES"
+          fi
+          bundle exec undercover \
+            --compare origin/${{ github.base_ref }} \
+            --include-files "$INCLUDE_FILES" \
+            $EXCLUDE_ARG \
+            --simplecov coverage/coverage.json
+
       - name: Comment on PR
         env:
           GH_TOKEN: ${{ github.token }}
@@ -184,7 +145,7 @@ jobs:
             BASE_RESULTSET="coverage-base/.resultset.json"
           fi
           BODY="$(ruby _ci_workflows_/.github/scripts/coverage_report.rb \
-                   "${{ needs.check.outputs.coverage_outcome }}" \
+                   "${{ steps.coverage.outcome }}" \
                    "origin/${{ github.base_ref }}" \
                    "coverage/.resultset.json" \
                    "$BASE_RESULTSET")"
@@ -204,4 +165,4 @@ jobs:
 
       - name: Fail if coverage check failed
         run: |
-          [ "${{ needs.check.outputs.coverage_outcome }}" = "success" ]
+          [ "${{ steps.coverage.outcome }}" = "success" ]
