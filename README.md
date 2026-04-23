@@ -55,10 +55,13 @@ jobs:
       gem_name: my-gem-name                          # must match `<gem_name>.gemspec`
       version_file: lib/my/gem/version.rb            # file the new version is sed-written to
       bump: ${{ inputs.bump }}
-    secrets: inherit
+    secrets:
+      RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
     permissions:
       contents: read
 ```
+
+> Secrets are forwarded nominatively (least-privilege). `secrets: inherit` would also work but would expose every secret of the consumer repo to this workflow. Only `RELEASE_APP_PRIVATE_KEY` is required; `GITHUB_TOKEN` is auto-provided in every called workflow.
 
 ### `.github/workflows/release.yml`
 
@@ -78,10 +81,11 @@ jobs:
     uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-release.yml@main
     with:
       gem_name: my-gem-name
-    secrets: inherit
     permissions:
       contents: write
 ```
+
+> No `secrets:` block — this workflow only needs `GITHUB_TOKEN`, which is auto-provided in every called workflow.
 
 > The release workflow reads the version via `Gem::Specification.load('<gem_name>.gemspec').version` — the same source of truth `gem build` uses. No assumption on the file path, the constant name, or the quote style. Only `gem_name` is needed.
 
@@ -99,13 +103,12 @@ jobs:
     uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-publish.yml@main
     with:
       gem_name: my-gem-name
-    secrets: inherit
     permissions:
       contents: read
       packages: write
 ```
 
-No `tag` input — the workflow reads it from the `release` event directly.
+No `tag` input — the workflow reads it from the `release` event directly. No `secrets:` block — `GITHUB_TOKEN` is auto-provided and is the only secret this workflow reads.
 
 ### Manual republish (standalone)
 
