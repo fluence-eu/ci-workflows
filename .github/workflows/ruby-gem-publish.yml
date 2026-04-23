@@ -17,6 +17,11 @@ on:
         required: false
         type: string
         default: ''
+      ruby_version:
+        description: Ruby version for the runner
+        required: false
+        type: string
+        default: '4.0'
   workflow_dispatch:
     inputs:
       gem_name:
@@ -27,6 +32,11 @@ on:
         description: Tag to publish (e.g. v0.12.0)
         required: true
         type: string
+      ruby_version:
+        description: Ruby version for the runner
+        required: false
+        type: string
+        default: '4.0'
 
 jobs:
   publish:
@@ -53,7 +63,7 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.4'
+          ruby-version: ${{ inputs.ruby_version }}
 
       - name: Download gem asset from release
         env:

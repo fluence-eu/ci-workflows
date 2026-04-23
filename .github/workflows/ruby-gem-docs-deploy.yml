@@ -1,0 +1,63 @@
+name: Ruby Gem — Docs Deploy
+
+# Builds the YARD site of a Ruby gem, enforces the yardstick
+# documentation-quality threshold, and deploys the result to
+# GitHub Pages. Intended to be called by a consumer workflow
+# whose trigger is `push: branches: [main]` (and optionally
+# `workflow_dispatch` for manual redeploys).
+
+on:
+  workflow_call:
+    inputs:
+      ruby_version:
+        description: Ruby version for the runner
+        required: false
+        type: string
+        default: '4.0'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build & verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ inputs.ruby_version }}
+          bundler-cache: true
+
+      - name: Build YARD site
+        run: bundle exec rake doc:build
+
+      - name: Run yardstick measurement
+        run: bundle exec rake doc:measure
+
+      - name: Run yardstick verify (fails below threshold)
+        run: bundle exec rake doc:verify
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: doc/
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v5

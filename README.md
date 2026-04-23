@@ -6,15 +6,23 @@ Reusable GitHub Actions workflows shared across [fluence-eu](https://github.com/
 
 ## Design: one trigger, one workflow run
 
-The release flow is split into **three separate reusable workflows**, each bound to a single event type. Consumers declare three matching thin workflow files in their own repo — **no job conditions, no ghost skipped runs** in the Actions UI.
+Each reusable workflow is bound to **a single event type**. Consumers declare matching thin workflow files in their own repo — no `if:` conditions on jobs, no ghost skipped runs in the Actions UI.
 
-| Central workflow | Called by consumer workflow | Trigger | Role |
+| Central workflow | Consumer file | Trigger | Role |
 |---|---|---|---|
 | `ruby-gem-prepare-release.yml` | `prepare-release.yml` | `workflow_dispatch` | Bump version, regenerate `CHANGELOG.md`, open release PR |
 | `ruby-gem-release.yml` | `release.yml` | `push` on the version file | Tag, GitHub Release, build & attach the `.gem` asset |
 | `ruby-gem-publish.yml` | `publish.yml` | `release: published` (+ optional `workflow_dispatch`) | Download the `.gem` asset from the release and push it to GitHub Packages |
+| `ruby-gem-docs-deploy.yml` | `docs-deploy.yml` | `push main` (+ optional `workflow_dispatch`) | Build YARD site, enforce yardstick threshold, deploy to GitHub Pages |
+| `ruby-gem-docs-pr.yml` | `docs-pr.yml` | `pull_request` | Build YARD + yardstick, diff against main, post sticky PR comment |
 
-Flow:
+## Pinning: `@v1`
+
+All workflow references below pin to `@v1`. This tag is kept mobile — it points at the latest backward-compatible commit of `main`. Bug fixes are picked up by consumers automatically on the next run. Breaking changes (e.g. removed input) cut a new `@v2` and consumers upgrade explicitly.
+
+Use `@main` only for active central-workflow development, when you want the cutting edge.
+
+## Release flow
 
 ```
 Operator dispatches "Prepare Release PR"
@@ -23,11 +31,23 @@ Operator dispatches "Prepare Release PR"
 Release PR merges → push on version file
   └── ruby-gem-release.yml — tags, creates GitHub Release, attaches .gem
 
-GitHub Release is published (automatic signal emitted by the above)
+GitHub Release is published (automatic signal from the above)
   └── ruby-gem-publish.yml — downloads the .gem asset, pushes to GitHub Packages
 ```
 
 Publishing is decoupled from building: the `.gem` file shipped to the registry is literally the one attached to the GitHub Release, so the two sources of truth can't drift. Re-publishing is as simple as re-publishing the GitHub Release, or dispatching `ruby-gem-publish.yml` manually with a `tag`.
+
+## Docs flow
+
+```
+Push to main
+  └── ruby-gem-docs-deploy.yml — build + verify + deploy to GitHub Pages
+
+Pull request
+  └── ruby-gem-docs-pr.yml     — build + yardstick diff + sticky PR comment
+```
+
+The yardstick report helper (`yardstick_report.rb`) lives in this repo at `.github/scripts/`. `ruby-gem-docs-pr.yml` fetches it via a sidecar checkout so consumers don't keep a local copy.
 
 ## Consumer usage
 
@@ -50,11 +70,12 @@ on:
 
 jobs:
   prepare:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-prepare-release.yml@main
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-prepare-release.yml@v1
     with:
       gem_name: my-gem-name                          # must match `<gem_name>.gemspec`
       version_file: lib/my/gem/version.rb            # file the new version is sed-written to
       bump: ${{ inputs.bump }}
+      # ruby_version: '3.2'                          # optional, default '4.0'
     secrets:
       RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
     permissions:
@@ -78,14 +99,13 @@ on:
 
 jobs:
   release:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-release.yml@main
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-release.yml@v1
     with:
       gem_name: my-gem-name
+      # ruby_version: '3.2'                          # optional, default '4.0'
     permissions:
       contents: write
 ```
-
-> No `secrets:` block — this workflow only needs `GITHUB_TOKEN`, which is auto-provided in every called workflow.
 
 > The release workflow reads the version via `Gem::Specification.load('<gem_name>.gemspec').version` — the same source of truth `gem build` uses. No assumption on the file path, the constant name, or the quote style. Only `gem_name` is needed.
 
@@ -100,15 +120,56 @@ on:
 
 jobs:
   publish:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-publish.yml@main
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-publish.yml@v1
     with:
       gem_name: my-gem-name
+      # ruby_version: '3.2'                          # optional, default '4.0'
     permissions:
       contents: read
       packages: write
 ```
 
-No `tag` input — the workflow reads it from the `release` event directly. No `secrets:` block — `GITHUB_TOKEN` is auto-provided and is the only secret this workflow reads.
+No `tag` input — the workflow reads it from the `release` event directly.
+
+### `.github/workflows/docs-deploy.yml`
+
+```yaml
+name: Docs Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  docs:
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-deploy.yml@v1
+    with:
+      # ruby_version: '3.2'                          # optional, default '4.0'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+```
+
+### `.github/workflows/docs-pr.yml`
+
+```yaml
+name: Docs PR Check
+
+on:
+  pull_request:
+
+jobs:
+  docs:
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-pr.yml@v1
+    with:
+      # ruby_version: '3.2'                          # optional, default '4.0'
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+```
 
 ### Manual republish (standalone)
 
@@ -131,7 +192,7 @@ on:
 jobs:
   publish:
     if: startsWith(github.event.release.tag_name, 'gem-a-')
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-publish.yml@main
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-publish.yml@v1
     with:
       gem_name: gem-a
     ...
@@ -147,13 +208,8 @@ Each consumer repo must expose:
 | secret | `GITHUB_TOKEN` | Provided automatically by Actions |
 | var | `RELEASE_APP_ID` | GitHub App ID |
 
-## Pinning policy
-
-Examples pin to `@main`. For stricter control, pin to a tag once a `v1` tag of this repo exists (e.g. `@v1`). Main is kept stable on purpose — breaking changes go on `v2/`, `v3/`… branches.
-
 ## Phase 2 (future)
 
 Not yet centralised — variations are still too wide across projects:
 
 - `main.yml` — Ruby matrix. `fluence-gateway-auth` needs an Appraisal+Rails matrix; the others a plain Ruby matrix.
-- `docs.yml` — YARD + yardstick. Differs on `ruby-version` and upload-pages action versions.

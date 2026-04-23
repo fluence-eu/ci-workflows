@@ -1,0 +1,157 @@
+name: Ruby Gem — Docs PR Check
+
+# Runs on pull requests. Builds the YARD site and yardstick report
+# for the PR head, downloads the latest successful yardstick report
+# from main for a side-by-side diff, and posts (or updates) a sticky
+# comment on the PR. Fails if the yardstick verify step failed on
+# the PR — so merging a PR cannot silently degrade doc coverage.
+#
+# The yardstick_report.rb helper lives in this central repo and is
+# fetched via a sidecar checkout, so consumers don't carry a local
+# copy of it.
+
+on:
+  workflow_call:
+    inputs:
+      ruby_version:
+        description: Ruby version for the runner
+        required: false
+        type: string
+        default: '4.0'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & measure
+    runs-on: ubuntu-latest
+    outputs:
+      verify_outcome: ${{ steps.verify.outcome }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ inputs.ruby_version }}
+          bundler-cache: true
+
+      - name: Build YARD site
+        run: bundle exec rake doc:build
+
+      - name: Run yardstick measurement
+        run: bundle exec rake doc:measure
+
+      - name: Run yardstick verify (soft — drives the PR comment)
+        id: verify
+        continue-on-error: true
+        run: bundle exec rake doc:verify
+
+      - name: Upload yardstick report
+        uses: actions/upload-artifact@v7
+        with:
+          name: yardstick-report
+          path: doc/yardstick_report.txt
+
+  comment:
+    name: Comment on PR
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+    steps:
+      - name: Checkout consumer repo
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Checkout ci-workflows (for yardstick_report.rb)
+        uses: actions/checkout@v6
+        with:
+          repository: fluence-eu/ci-workflows
+          ref: v1
+          path: _ci_workflows_
+
+      - name: Download PR yardstick report
+        uses: actions/download-artifact@v8
+        with:
+          name: yardstick-report
+          path: yardstick-pr/
+
+      - name: Find latest main run with yardstick report
+        id: base-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # `status=success` is silently ignored by the runs endpoint
+          # (success is a conclusion, not a status). Query completed
+          # runs and filter by .conclusion in jq.
+          RUN_ID=$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/docs-deploy.yml/runs?branch=main&status=completed&per_page=20" \
+            --jq '[.workflow_runs[] | select(.conclusion == "success")][0].id // ""')
+          echo "id=$RUN_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Download base yardstick report
+        if: steps.base-run.outputs.id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: yardstick-report
+          run-id: ${{ steps.base-run.outputs.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: yardstick-base/
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ inputs.ruby_version }}
+          bundler-cache: true
+
+      - name: Build comment body
+        id: body
+        env:
+          # Used by the script to render GitHub blob links pointing at
+          # the PR head SHA, so each violation row is one-click-navigable.
+          GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          PR_REPORT="yardstick-pr/yardstick_report.txt"
+          BASE_REPORT=""
+          if [ -f yardstick-base/yardstick_report.txt ]; then
+            BASE_REPORT="yardstick-base/yardstick_report.txt"
+          fi
+
+          BODY="$(ruby _ci_workflows_/.github/scripts/yardstick_report.rb \
+                   "${{ needs.build.outputs.verify_outcome }}" \
+                   "origin/${{ github.base_ref }}" \
+                   "$PR_REPORT" "$BASE_REPORT")"
+
+          {
+            echo "body<<EOF"
+            echo "<!-- yardstick-report -->"
+            echo "$BODY"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Comment on PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BODY: ${{ steps.body.outputs.body }}
+        run: |
+          MARKER="<!-- yardstick-report -->"
+          PR=${{ github.event.pull_request.number }}
+          COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${PR}/comments" \
+            --paginate --jq "[.[] | select(.body | startswith(\"${MARKER}\"))][0].id // \"\"")
+
+          if [ -n "$COMMENT_ID" ]; then
+            gh api "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}" \
+              -X PATCH -f body="$BODY"
+          else
+            gh api "repos/${{ github.repository }}/issues/${PR}/comments" \
+              -f body="$BODY"
+          fi
+
+      - name: Fail if yardstick verify failed
+        run: |
+          [ "${{ needs.build.outputs.verify_outcome }}" = "success" ]

@@ -7,6 +7,11 @@ on:
         description: Gem name (must match gemspec filename without extension)
         required: true
         type: string
+      ruby_version:
+        description: Ruby version for the runner
+        required: false
+        type: string
+        default: '4.0'
 
 jobs:
   release:
@@ -25,7 +30,7 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.4'
+          ruby-version: ${{ inputs.ruby_version }}
           bundler-cache: true
 
       - name: Get version from gemspec

@@ -15,6 +15,11 @@ on:
         description: Version bump type (patch|minor|major)
         required: true
         type: string
+      ruby_version:
+        description: Ruby version for the runner
+        required: false
+        type: string
+        default: '4.0'
     secrets:
       RELEASE_APP_PRIVATE_KEY:
         description: Private key of the GitHub App that opens the release PR
@@ -50,6 +55,11 @@ jobs:
           BOT_ID=$(gh api "/users/${BOT_USER}" --jq .id)
           git config user.name "${BOT_USER}"
           git config user.email "${BOT_ID}+${BOT_USER}@users.noreply.github.com"
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ inputs.ruby_version }}
 
       - name: Bump version
         id: bump
