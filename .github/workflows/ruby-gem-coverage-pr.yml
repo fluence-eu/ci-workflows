@@ -35,6 +35,10 @@ on:
         required: false
         type: string
         default: ''
+    secrets:
+      FLUENCE_CI_BOT_PRIVATE_KEY:
+        description: Private key of the read-only GitHub App used to checkout this central repo as a sidecar (to fetch `coverage_report.rb`).
+        required: true
 
 permissions:
   contents: read
@@ -52,12 +56,21 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Generate CI bot token (read-only access to ci-workflows)
+        id: ci-bot-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.FLUENCE_CI_BOT_ID }}
+          private-key: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
+          repositories: ci-workflows
+
       - name: Checkout ci-workflows (for coverage_report.rb)
         uses: actions/checkout@v6
         with:
           repository: fluence-eu/ci-workflows
           ref: v1
           path: _ci_workflows_
+          token: ${{ steps.ci-bot-token.outputs.token }}
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
