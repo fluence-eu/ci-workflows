@@ -18,6 +18,11 @@ on:
         required: false
         type: string
         default: '4.0'
+      deploy_workflow_file:
+        description: Consumer workflow filename that uploaded the `yardstick-report` artifact on the base branch (used to find the baseline).
+        required: false
+        type: string
+        default: 'docs-deploy.yml'
 
 permissions:
   contents: read
@@ -77,16 +82,18 @@ jobs:
           name: yardstick-report
           path: yardstick-pr/
 
-      - name: Find latest main run with yardstick report
+      - name: Find latest base-branch run with yardstick report
         id: base-run
         env:
           GH_TOKEN: ${{ github.token }}
+          WORKFLOW_FILE: ${{ inputs.deploy_workflow_file }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
           # `status=success` is silently ignored by the runs endpoint
           # (success is a conclusion, not a status). Query completed
           # runs and filter by .conclusion in jq.
           RUN_ID=$(gh api \
-            "repos/${{ github.repository }}/actions/workflows/docs-deploy.yml/runs?branch=main&status=completed&per_page=20" \
+            "repos/${{ github.repository }}/actions/workflows/${WORKFLOW_FILE}/runs?branch=${BASE_REF}&status=completed&per_page=20" \
             --jq '[.workflow_runs[] | select(.conclusion == "success")][0].id // ""')
           echo "id=$RUN_ID" >> "$GITHUB_OUTPUT"
 
