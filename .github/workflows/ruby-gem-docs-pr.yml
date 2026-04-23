@@ -1,14 +1,19 @@
 name: Ruby Gem — Docs PR Check
 
-# Runs on pull requests. Builds the YARD site and yardstick report
-# for the PR head, downloads the latest successful yardstick report
-# from main for a side-by-side diff, and posts (or updates) a sticky
-# comment on the PR. Fails if the yardstick verify step failed on
-# the PR — so merging a PR cannot silently degrade doc coverage.
+# Self-contained PR check for Ruby gem docs. Runs on pull requests.
 #
-# The yardstick_report.rb helper lives in this central repo and is
-# fetched via a sidecar checkout, so consumers don't carry a local
-# copy of it.
+# Measures the PR head, measures the base branch (checked out in a
+# sidecar) for a before/after diff, runs yardstick verify on the PR,
+# and posts (or updates) a sticky comment. Fails if verify failed on
+# the PR — so merging cannot silently degrade doc coverage.
+#
+# No cross-workflow artifact dependency: docs-deploy is responsible
+# only for deploying GitHub Pages and does not need to upload a
+# yardstick baseline. The baseline is produced here, from the live
+# base branch, at every PR run.
+#
+# The yardstick_report.rb helper lives in this central repo at
+# .github/scripts/ and is fetched via a sidecar checkout.
 
 on:
   workflow_call:
@@ -18,56 +23,27 @@ on:
         required: false
         type: string
         default: '4.0'
-      deploy_workflow_file:
-        description: Consumer workflow filename that uploaded the `yardstick-report` artifact on the base branch (used to find the baseline).
-        required: false
-        type: string
-        default: 'docs-deploy.yml'
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
-  measure:
-    name: Measure & verify
-    runs-on: ubuntu-latest
-    outputs:
-      verify_outcome: ${{ steps.verify.outcome }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: ${{ inputs.ruby_version }}
-          bundler-cache: true
-
-      - name: Run yardstick measurement
-        run: bundle exec rake doc:measure
-
-      - name: Run yardstick verify (soft — drives the PR comment)
-        id: verify
-        continue-on-error: true
-        run: bundle exec rake doc:verify
-
-      - name: Upload yardstick report
-        uses: actions/upload-artifact@v7
-        with:
-          name: yardstick-report
-          path: doc/yardstick_report.txt
-
   comment:
     name: Comment on PR
-    needs: measure
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-      actions: read
     steps:
-      - name: Checkout consumer repo
+      - name: Checkout PR head
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
+      - name: Checkout base branch (for baseline)
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.base_ref }}
+          path: _base_
+          fetch-depth: 1
 
       - name: Checkout ci-workflows (for yardstick_report.rb)
         uses: actions/checkout@v6
@@ -76,42 +52,31 @@ jobs:
           ref: v1
           path: _ci_workflows_
 
-      - name: Download PR yardstick report
-        uses: actions/download-artifact@v8
-        with:
-          name: yardstick-report
-          path: yardstick-pr/
-
-      - name: Find latest base-branch run with yardstick report
-        id: base-run
-        env:
-          GH_TOKEN: ${{ github.token }}
-          WORKFLOW_FILE: ${{ inputs.deploy_workflow_file }}
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          # `status=success` is silently ignored by the runs endpoint
-          # (success is a conclusion, not a status). Query completed
-          # runs and filter by .conclusion in jq.
-          RUN_ID=$(gh api \
-            "repos/${{ github.repository }}/actions/workflows/${WORKFLOW_FILE}/runs?branch=${BASE_REF}&status=completed&per_page=20" \
-            --jq '[.workflow_runs[] | select(.conclusion == "success")][0].id // ""')
-          echo "id=$RUN_ID" >> "$GITHUB_OUTPUT"
-
-      - name: Download base yardstick report
-        if: steps.base-run.outputs.id != ''
-        continue-on-error: true
-        uses: actions/download-artifact@v8
-        with:
-          name: yardstick-report
-          run-id: ${{ steps.base-run.outputs.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: yardstick-base/
-
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ inputs.ruby_version }}
           bundler-cache: true
+
+      - name: Measure PR (yardstick)
+        run: bundle exec rake doc:measure
+
+      - name: Save PR yardstick report
+        run: cp doc/yardstick_report.txt /tmp/yardstick_pr.txt
+
+      - name: Verify PR threshold (soft — drives the comment)
+        id: verify
+        continue-on-error: true
+        run: bundle exec rake doc:verify
+
+      - name: Measure base branch (yardstick)
+        working-directory: _base_
+        run: |
+          # bundler-cache above only installs the PR's gems; install
+          # the base branch's gems here.
+          bundle install --quiet
+          bundle exec rake doc:measure
+          cp doc/yardstick_report.txt /tmp/yardstick_base.txt
 
       - name: Build comment body
         id: body
@@ -120,16 +85,11 @@ jobs:
           # the PR head SHA, so each violation row is one-click-navigable.
           GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          PR_REPORT="yardstick-pr/yardstick_report.txt"
-          BASE_REPORT=""
-          if [ -f yardstick-base/yardstick_report.txt ]; then
-            BASE_REPORT="yardstick-base/yardstick_report.txt"
-          fi
-
           BODY="$(ruby _ci_workflows_/.github/scripts/yardstick_report.rb \
-                   "${{ needs.measure.outputs.verify_outcome }}" \
+                   "${{ steps.verify.outcome }}" \
                    "origin/${{ github.base_ref }}" \
-                   "$PR_REPORT" "$BASE_REPORT")"
+                   "/tmp/yardstick_pr.txt" \
+                   "/tmp/yardstick_base.txt")"
 
           {
             echo "body<<EOF"
@@ -158,4 +118,4 @@ jobs:
 
       - name: Fail if yardstick verify failed
         run: |
-          [ "${{ needs.measure.outputs.verify_outcome }}" = "success" ]
+          [ "${{ steps.verify.outcome }}" = "success" ]
