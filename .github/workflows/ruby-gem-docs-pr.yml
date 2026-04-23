@@ -36,9 +36,6 @@ jobs:
           ruby-version: ${{ inputs.ruby_version }}
           bundler-cache: true
 
-      - name: Build YARD site
-        run: bundle exec rake doc:build
-
       - name: Run yardstick measurement
         run: bundle exec rake doc:measure
 
