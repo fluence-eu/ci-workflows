@@ -13,7 +13,7 @@ Each reusable workflow is bound to **a single event type**. Consumers declare ma
 | `ruby-gem-prepare-release.yml` | `prepare-release.yml` | `workflow_dispatch` | Bump version, regenerate `CHANGELOG.md`, open release PR |
 | `ruby-gem-release.yml` | `release.yml` | `push` on the version file | Tag, GitHub Release, build & attach the `.gem` asset |
 | `ruby-gem-publish.yml` | `publish.yml` | `release: published` (+ optional `workflow_dispatch`) | Download the `.gem` asset from the release and push it to GitHub Packages |
-| `ruby-gem-docs-deploy.yml` | `docs-deploy.yml` | `push main` (+ optional `workflow_dispatch`) | Build YARD site, enforce yardstick threshold, deploy to GitHub Pages |
+| `ruby-gem-docs-deploy.yml` | `docs-deploy.yml` | `push main` (+ optional `workflow_dispatch`) | Build YARD site, deploy to GitHub Pages |
 | `ruby-gem-docs-pr.yml` | `docs-pr.yml` | `pull_request` | Build YARD + yardstick, diff against main, post sticky PR comment |
 
 ## Pinning: `@v1`
@@ -41,7 +41,7 @@ Publishing is decoupled from building: the `.gem` file shipped to the registry i
 
 ```
 Push to main
-  └── ruby-gem-docs-deploy.yml — build + verify + deploy to GitHub Pages
+  └── ruby-gem-docs-deploy.yml — build + deploy to GitHub Pages
 
 Pull request
   └── ruby-gem-docs-pr.yml     — build + yardstick diff + sticky PR comment

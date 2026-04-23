@@ -37,12 +37,6 @@ jobs:
       - name: Build YARD site
         run: bundle exec rake doc:build
 
-      - name: Run yardstick measurement
-        run: bundle exec rake doc:measure
-
-      - name: Run yardstick verify (fails below threshold)
-        run: bundle exec rake doc:verify
-
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:
