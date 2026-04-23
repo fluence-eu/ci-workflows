@@ -25,6 +25,16 @@ on:
         required: false
         type: string
         default: 'main.yml'
+      include_files:
+        description: undercover --include-files glob (files considered for coverage).
+        required: false
+        type: string
+        default: 'lib/**/*.rb'
+      exclude_files:
+        description: undercover --exclude-files glob (files ignored by coverage). Empty = no exclusion.
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -86,9 +96,20 @@ jobs:
       - name: Check coverage
         id: coverage
         continue-on-error: true
+        env:
+          INCLUDE_FILES: ${{ inputs.include_files }}
+          EXCLUDE_FILES: ${{ inputs.exclude_files }}
         run: |
           set -o pipefail
-          bundle exec undercover --compare origin/${{ github.base_ref }} --include-files 'lib/**/*.rb' --simplecov coverage/coverage.json | tee /tmp/undercover.txt
+          EXCLUDE_ARG=""
+          if [ -n "$EXCLUDE_FILES" ]; then
+            EXCLUDE_ARG="--exclude-files $EXCLUDE_FILES"
+          fi
+          bundle exec undercover \
+            --compare origin/${{ github.base_ref }} \
+            --include-files "$INCLUDE_FILES" \
+            $EXCLUDE_ARG \
+            --simplecov coverage/coverage.json | tee /tmp/undercover.txt
 
       - name: Comment on PR
         env:
