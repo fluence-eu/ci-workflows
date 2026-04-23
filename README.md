@@ -6,32 +6,28 @@ Reusable GitHub Actions workflows shared across [fluence-eu](https://github.com/
 
 ## Design: one trigger, one workflow run
 
-The release flow is split into **two separate reusable workflows**, each bound to a single event type. Consumers declare two matching workflow files in their own repo — **no job conditions, no ghost skipped runs** in the Actions UI.
+The release flow is split into **three separate reusable workflows**, each bound to a single event type. Consumers declare three matching thin workflow files in their own repo — **no job conditions, no ghost skipped runs** in the Actions UI.
 
-| Central workflow | Called by consumer workflow | Trigger |
-|---|---|---|
-| `ruby-gem-prepare-release.yml` | `.github/workflows/prepare-release.yml` | `workflow_dispatch` |
-| `ruby-gem-release.yml` | `.github/workflows/release.yml` | `push` on version file |
-| `ruby-gem-publish.yml` *(standalone)* | — | `workflow_dispatch` on this repo (manual republish) |
+| Central workflow | Called by consumer workflow | Trigger | Role |
+|---|---|---|---|
+| `ruby-gem-prepare-release.yml` | `prepare-release.yml` | `workflow_dispatch` | Bump version, regenerate `CHANGELOG.md`, open release PR |
+| `ruby-gem-release.yml` | `release.yml` | `push` on the version file | Tag, GitHub Release, build & attach the `.gem` asset |
+| `ruby-gem-publish.yml` | `publish.yml` | `release: published` (+ optional `workflow_dispatch`) | Download the `.gem` asset from the release and push it to GitHub Packages |
 
 Flow:
 
 ```
 Operator dispatches "Prepare Release PR"
-  └── ruby-gem-prepare-release.yml
-      • bump version
-      • regenerate CHANGELOG.md via git-cliff
-      • open release/vX.Y.Z PR
+  └── ruby-gem-prepare-release.yml — opens release/vX.Y.Z PR
 
-Release PR merges to main (touches version file)
-  └── ruby-gem-release.yml (single job: Release)
-      • read version from version file
-      • create git tag
-      • create GitHub release with extracted changelog
-      • build gem
-      • push to GitHub Packages
-      • attach gem to release
+Release PR merges → push on version file
+  └── ruby-gem-release.yml — tags, creates GitHub Release, attaches .gem
+
+GitHub Release is published (automatic signal emitted by the above)
+  └── ruby-gem-publish.yml — downloads the .gem asset, pushes to GitHub Packages
 ```
+
+Publishing is decoupled from building: the `.gem` file shipped to the registry is literally the one attached to the GitHub Release, so the two sources of truth can't drift. Re-publishing is as simple as re-publishing the GitHub Release, or dispatching `ruby-gem-publish.yml` manually with a `tag`.
 
 ## Consumer usage
 
@@ -57,7 +53,7 @@ jobs:
     uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-prepare-release.yml@main
     with:
       gem_name: my-gem-name                          # must match `<gem_name>.gemspec`
-      version_file: lib/my/gem/version.rb            # file containing `VERSION = '...'`
+      version_file: lib/my/gem/version.rb            # file the new version is sed-written to
       bump: ${{ inputs.bump }}
     secrets: inherit
     permissions:
@@ -85,17 +81,58 @@ jobs:
     secrets: inherit
     permissions:
       contents: write
-      packages: write
 ```
 
 > The release workflow reads the version via `Gem::Specification.load('<gem_name>.gemspec').version` — the same source of truth `gem build` uses. No assumption on the file path, the constant name, or the quote style. Only `gem_name` is needed.
 
+### `.github/workflows/publish.yml`
+
+```yaml
+name: Publish Gem
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-publish.yml@main
+    with:
+      gem_name: my-gem-name
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write
+```
+
+No `tag` input — the workflow reads it from the `release` event directly.
+
 ### Manual republish (standalone)
 
-If a release tag exists but the gem push failed or was skipped, dispatch `ruby-gem-publish.yml` **directly on this repo**:
+If a release tag already exists with the `.gem` attached but the gem push step failed or was skipped, dispatch `ruby-gem-publish.yml` **directly on this repo**:
 
 1. Go to [Actions → Ruby Gem — Publish to GitHub Packages](https://github.com/fluence-eu/ci-workflows/actions/workflows/ruby-gem-publish.yml).
 2. Run workflow with `tag` = `v0.12.0` (for example) and `gem_name` = your gem name.
+
+The workflow downloads the `.gem` asset from that release and pushes it.
+
+### Monorepo note
+
+`gem_name` is always explicit. In a repo that ships multiple gems, declare one `publish.yml` per gem and gate each with a tag pattern:
+
+```yaml
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    if: startsWith(github.event.release.tag_name, 'gem-a-')
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-publish.yml@main
+    with:
+      gem_name: gem-a
+    ...
+```
 
 ## Required secrets and vars
 

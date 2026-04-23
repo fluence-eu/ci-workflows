@@ -1,48 +1,70 @@
 name: Ruby Gem — Publish to GitHub Packages
 
+# Publishes an already-built gem to GitHub Packages. The gem is
+# downloaded from the release assets (attached by ruby-gem-release.yml)
+# rather than rebuilt, so what's shipped to the registry is bit-for-bit
+# the same binary as what's pinned to the GitHub Release.
+
 on:
   workflow_call:
     inputs:
-      tag:
-        description: Tag to publish (e.g. v0.12.0)
-        required: true
-        type: string
       gem_name:
-        description: Gem name (must match gemspec filename without extension)
+        description: Gem name (must match gemspec filename and the `<gem_name>-*.gem` asset on the release)
         required: true
         type: string
+      tag:
+        description: Tag to publish. Optional when called from `on: release` (the event provides it); required when called from `workflow_dispatch`.
+        required: false
+        type: string
+        default: ''
   workflow_dispatch:
     inputs:
-      tag:
-        description: Tag to publish (e.g. v0.12.0)
+      gem_name:
+        description: Gem name (must match the `<gem_name>-*.gem` asset on the release)
         required: true
         type: string
-      gem_name:
-        description: Gem name (must match gemspec filename without extension)
+      tag:
+        description: Tag to publish (e.g. v0.12.0)
         required: true
         type: string
 
 jobs:
   publish:
+    name: Publish
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       packages: write
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ inputs.tag }}
+      - name: Resolve tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          TAG="${INPUT_TAG:-$EVENT_TAG}"
+          if [[ -z "$TAG" ]]; then
+            echo "ERROR: no tag provided via inputs and no release event context available." >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
-          bundler-cache: true
 
-      - name: Build gem
-        run: gem build ${{ inputs.gem_name }}.gemspec
+      - name: Download gem asset from release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          GEM_NAME: ${{ inputs.gem_name }}
+        run: |
+          gh release download "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "${GEM_NAME}-*.gem" \
+            --clobber
 
       - name: Configure gem credentials
         run: |
@@ -53,10 +75,5 @@ jobs:
           EOF
           chmod 0600 ~/.gem/credentials
 
-      - name: Push to GitHub Packages
+      - name: Push gem to GitHub Packages
         run: gem push --key github --host https://rubygems.pkg.github.com/fluence-eu ${{ inputs.gem_name }}-*.gem
-
-      - name: Attach gem to release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ inputs.tag }} ${{ inputs.gem_name }}-*.gem --clobber

@@ -75,18 +75,6 @@ jobs:
       - name: Build gem
         run: gem build ${{ inputs.gem_name }}.gemspec
 
-      - name: Configure gem credentials
-        run: |
-          mkdir -p ~/.gem
-          cat > ~/.gem/credentials << EOF
-          ---
-          :github: Bearer ${{ secrets.GITHUB_TOKEN }}
-          EOF
-          chmod 0600 ~/.gem/credentials
-
-      - name: Push gem to GitHub Packages
-        run: gem push --key github --host https://rubygems.pkg.github.com/fluence-eu ${{ inputs.gem_name }}-*.gem
-
       - name: Attach gem to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
