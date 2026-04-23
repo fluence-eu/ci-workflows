@@ -37,8 +37,13 @@ on:
           - patch
           - minor
           - major
+  # Only trigger on pushes that touch the version file. Without this
+  # paths filter, the workflow fires on every merge to main and shows
+  # in the Actions UI with all jobs skipped for non-release commits.
   push:
     branches: [main]
+    paths:
+      - lib/my/gem/version.rb
 
 jobs:
   release:
