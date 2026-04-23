@@ -15,6 +15,7 @@ Each reusable workflow is bound to **a single event type**. Consumers declare ma
 | `ruby-gem-publish.yml` | `publish.yml` | `release: published` (+ optional `workflow_dispatch`) | Download the `.gem` asset from the release and push it to GitHub Packages |
 | `ruby-gem-docs-deploy.yml` | `docs-deploy.yml` | `push main` (+ optional `workflow_dispatch`) | Build YARD site, deploy to GitHub Pages |
 | `ruby-gem-docs-pr.yml` | `docs-pr.yml` | `pull_request` | Build YARD + yardstick, diff against main, post sticky PR comment |
+| `ruby-gem-coverage-pr.yml` | (called from `main.yml` `coverage` job) | inherited from caller (`pull_request`) | Download coverage artifact, run undercover vs main baseline, post sticky PR comment, fail on regression |
 
 ## Pinning: `@v1`
 
@@ -151,6 +152,32 @@ jobs:
       pages: write
       id-token: write
 ```
+
+### Coverage PR comment (`main.yml` coverage job)
+
+Unlike the other flows, coverage needs the build matrix's `coverage` artifact from the SAME workflow run, so it lives inside the consumer's existing `main.yml` as a downstream job rather than in its own file. Keep your build matrix local, and replace the coverage job with a thin delegation:
+
+```yaml
+jobs:
+  build:
+    # ... your project's Ruby/Rails matrix ...
+    # last step uploads `coverage` artifact on one Ruby version
+    ...
+
+  coverage:
+    needs: build
+    if: github.event_name == 'pull_request'
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-pr.yml@v1
+    with:
+      # ruby_version: '3.2'                          # optional, default '4.0'
+      # workflow_file: 'main.yml'                    # optional, default 'main.yml'
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+```
+
+The central workflow handles: artifact download, undercover run, baseline fetch from main, sticky PR comment, fail-on-regression. The `coverage_report.rb` helper lives centrally in `.github/scripts/` and is fetched via sidecar checkout.
 
 ### `.github/workflows/docs-pr.yml`
 

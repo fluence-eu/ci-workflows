@@ -1,0 +1,122 @@
+name: Ruby Gem — Coverage PR Check
+
+# Posts (or updates) a sticky coverage comment on a pull request,
+# comparing the PR's coverage to the latest successful run on main.
+# Fails if undercover flagged new uncovered code.
+#
+# Must be called by a job that depends on an upstream job of the
+# SAME workflow run which uploaded a `coverage` artifact with the
+# SimpleCov resultset + Undercover JSON files. Artifacts uploaded
+# in the same run are visible to reusable workflows.
+#
+# The coverage_report.rb helper lives in this central repo at
+# `.github/scripts/` and is fetched via a sidecar checkout.
+
+on:
+  workflow_call:
+    inputs:
+      ruby_version:
+        description: Ruby version for the runner
+        required: false
+        type: string
+        default: '4.0'
+      workflow_file:
+        description: Consumer workflow filename that uploaded the `coverage` artifact on main (used to find the baseline).
+        required: false
+        type: string
+        default: 'main.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+
+jobs:
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout consumer repo
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Checkout ci-workflows (for coverage_report.rb)
+        uses: actions/checkout@v6
+        with:
+          repository: fluence-eu/ci-workflows
+          ref: v1
+          path: _ci_workflows_
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ inputs.ruby_version }}
+          bundler-cache: true
+
+      - name: Download coverage artifact (this run)
+        uses: actions/download-artifact@v8
+        with:
+          name: coverage
+          path: coverage/
+
+      - name: Find latest main run with coverage artifact
+        id: base-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_FILE: ${{ inputs.workflow_file }}
+        run: |
+          RUN_ID=$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/${WORKFLOW_FILE}/runs?branch=main&status=success&per_page=1" \
+            --jq '.workflow_runs[0].id // ""')
+          echo "id=$RUN_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Download base coverage artifact
+        if: steps.base-run.outputs.id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: coverage
+          run-id: ${{ steps.base-run.outputs.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: coverage-base/
+
+      - name: Check coverage
+        id: coverage
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          bundle exec undercover --compare origin/${{ github.base_ref }} --include-files 'lib/**/*.rb' --simplecov coverage/coverage.json | tee /tmp/undercover.txt
+
+      - name: Comment on PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          MARKER="<!-- coverage-report -->"
+          BASE_RESULTSET=""
+          if [ -f coverage-base/.resultset.json ]; then
+            BASE_RESULTSET="coverage-base/.resultset.json"
+          fi
+          BODY="$(ruby _ci_workflows_/.github/scripts/coverage_report.rb \
+                   "${{ steps.coverage.outcome }}" \
+                   "origin/${{ github.base_ref }}" \
+                   "coverage/.resultset.json" \
+                   "$BASE_RESULTSET")"
+          BODY="${MARKER}"$'\n'"${BODY}"
+
+          PR=${{ github.event.pull_request.number }}
+          COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${PR}/comments" \
+            --paginate --jq "[.[] | select(.body | startswith(\"${MARKER}\"))][0].id // \"\"")
+
+          if [ -n "$COMMENT_ID" ]; then
+            gh api "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}" \
+              -X PATCH -f body="$BODY"
+          else
+            gh api "repos/${{ github.repository }}/issues/${PR}/comments" \
+              -f body="$BODY"
+          fi
+
+      - name: Fail if coverage check failed
+        run: |
+          [ "${{ steps.coverage.outcome }}" = "success" ]
