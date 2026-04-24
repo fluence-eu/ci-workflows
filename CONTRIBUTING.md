@@ -181,3 +181,21 @@ Do not include `Co-Authored-By:` trailers or any AI attribution.
 - [ ] Tested from at least one consumer PR with a branch pin
 - [ ] Decided whether this is a `@v1` move or a `@v2` cut
 - [ ] README.md updated if inputs, outputs, or the consumer contract changed
+
+---
+
+## AI-Assisted Contributions
+
+When using AI tools (Claude, Copilot, etc.) to generate commits or PRs:
+
+- **Classify first** — determine if the change is critical, major, minor, or trivial
+- **Focus on the "why"** — the diff already shows the "what"
+- **Skip boilerplate** — don't add empty sections or placeholder text
+
+The person opening the PR takes full responsibility for the code. Before submitting:
+
+- [ ] I have read and understood every line of code in this PR
+- [ ] I can explain why each change was made
+- [ ] I have tested the changes from a consumer PR (see "Testing changes" above)
+
+Do **not** add AI co-author lines (`Co-Authored-By`), "Generated with" footers, or any AI attribution in commits or PR descriptions.
