@@ -1,0 +1,49 @@
+name: Post Sticky PR Comment
+description: Create or update a sticky PR comment identified by an HTML marker. Dual-mode — if a GitHub App credential is provided the comment is authored by that App, otherwise falls back to the workflow's GITHUB_TOKEN.
+
+inputs:
+  marker:
+    description: HTML comment marker that uniquely identifies the sticky comment (e.g. `<!-- coverage-report -->`). The body input MUST already start with this marker.
+    required: true
+  body:
+    description: Markdown body to post. The sticky-comment marker must be included as the first line.
+    required: true
+  app-id:
+    description: GitHub App ID used to author the comment. Leave empty to post as `github-actions[bot]` via the default GITHUB_TOKEN.
+    required: false
+    default: ''
+  app-private-key:
+    description: GitHub App private key (PEM). Leave empty to post as `github-actions[bot]` via the default GITHUB_TOKEN.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    # Only generate the App token if the caller forwarded the private key.
+    # Without the key, the next step falls back to github.token.
+    - id: token
+      if: inputs.app-private-key != ''
+      uses: actions/create-github-app-token@v3
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.app-private-key }}
+
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ steps.token.outputs.token || github.token }}
+        MARKER: ${{ inputs.marker }}
+        BODY: ${{ inputs.body }}
+        REPO: ${{ github.repository }}
+        PR: ${{ github.event.pull_request.number }}
+      run: |
+        COMMENT_ID=$(gh api "repos/${REPO}/issues/${PR}/comments" \
+          --paginate --jq "[.[] | select(.body | startswith(\"${MARKER}\"))][0].id // \"\"")
+
+        if [ -n "$COMMENT_ID" ]; then
+          gh api "repos/${REPO}/issues/comments/${COMMENT_ID}" \
+            -X PATCH -f body="$BODY"
+        else
+          gh api "repos/${REPO}/issues/${PR}/comments" \
+            -f body="$BODY"
+        fi

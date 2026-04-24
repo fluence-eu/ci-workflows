@@ -24,6 +24,10 @@ on:
         required: false
         type: string
         default: 'docs-measure.yml'
+    secrets:
+      FLUENCE_CI_BOT_PRIVATE_KEY:
+        description: Optional GitHub App private key used to author the sticky PR comment. When omitted, the comment is posted as `github-actions[bot]` via the default `GITHUB_TOKEN`.
+        required: false
 
 permissions:
   contents: read
@@ -99,23 +103,12 @@ jobs:
           pr_path:   yardstick-pr/yardstick_report.txt
           base_path: ${{ steps.base.outputs.path }}
 
-      - name: Comment on PR
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BODY: ${{ steps.body.outputs.body }}
-        run: |
-          MARKER="<!-- yardstick-report -->"
-          PR=${{ github.event.pull_request.number }}
-          COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${PR}/comments" \
-            --paginate --jq "[.[] | select(.body | startswith(\"${MARKER}\"))][0].id // \"\"")
-
-          if [ -n "$COMMENT_ID" ]; then
-            gh api "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}" \
-              -X PATCH -f body="$BODY"
-          else
-            gh api "repos/${{ github.repository }}/issues/${PR}/comments" \
-              -f body="$BODY"
-          fi
+      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v1
+        with:
+          marker:          '<!-- yardstick-report -->'
+          body:            ${{ steps.body.outputs.body }}
+          app-id:          ${{ vars.FLUENCE_CI_BOT_ID }}
+          app-private-key: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
 
       - name: Fail if yardstick verify failed
         run: |
