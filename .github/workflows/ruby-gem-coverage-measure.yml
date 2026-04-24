@@ -45,7 +45,7 @@ jobs:
           ruby-version: ${{ inputs.ruby_version }}
           bundler-cache: true
 
-      - name: Run the test task (generates coverage/)
+      - name: Run tests
         run: bundle exec rake ${{ inputs.rake_task }}
 
       - name: Upload coverage artifact

@@ -46,7 +46,7 @@ jobs:
           ruby-version: ${{ inputs.ruby_version }}
           bundler-cache: true
 
-      - name: Run rubocop (soft — outcome exposed as output)
+      - name: Run rubocop
         id: rubocop
         continue-on-error: true
         run: |

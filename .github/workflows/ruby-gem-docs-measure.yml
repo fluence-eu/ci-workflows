@@ -51,7 +51,7 @@ jobs:
       - name: Run yardstick measurement
         run: bundle exec rake doc:measure
 
-      - name: Run yardstick verify (soft — outcome exposed as output)
+      - name: Run yardstick verify
         id: verify
         continue-on-error: true
         run: bundle exec rake doc:verify
