@@ -1,0 +1,156 @@
+name: App — Release
+
+# Triggered by consumer via push to the working branch (default
+# `develop`) with a paths filter on CHANGELOG.md. Verifies the
+# commit was authored by the release bot, extracts the tag from
+# the "release: vX" commit message, creates the tag + GitHub
+# Release, then force-pushes the working branch onto the released
+# branch so it mirrors the latest release state.
+#
+# Companion to app-prepare-release.yml: that workflow auto-merges
+# a "release: vX" commit touching CHANGELOG.md, which is what
+# fires this workflow.
+#
+# Pattern target: rolling-release apps. The final `git push
+# develop:main --force` is intentional — `main` is treated as a
+# read-only mirror of the released snapshot, not a contributing
+# branch. Any direct commit to `main` will be overwritten on the
+# next release.
+
+on:
+  workflow_call:
+    inputs:
+      develop_branch:
+        description: Working branch the release is cut from.
+        required: false
+        type: string
+        default: 'develop'
+      main_branch:
+        description: Released branch to force-push `develop` onto after the release.
+        required: false
+        type: string
+        default: 'main'
+    secrets:
+      RELEASE_APP_PRIVATE_KEY:
+        description: Private key of the GitHub App used to verify the release author and push the main mirror.
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Verify release was authored by the release bot
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXPECTED_BOT: ${{ steps.app-token.outputs.app-slug }}[bot]
+          AUTHOR: ${{ github.event.head_commit.author.name }}
+          MSG: ${{ github.event.head_commit.message }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Squash merge: commit author is the bot directly.
+          if [ "$AUTHOR" = "$EXPECTED_BOT" ]; then
+            echo "Verified: commit authored by $AUTHOR"
+            exit 0
+          fi
+          # Merge commit: extract PR number and check the PR author.
+          PR_NUM=$(printf '%s' "$MSG" | grep -oE '#[0-9]+' | tr -d '#' | head -1)
+          if [ -n "$PR_NUM" ]; then
+            PR_AUTHOR=$(gh pr view "$PR_NUM" --repo "$REPO" --json author --jq '.author.login')
+            if [ "$PR_AUTHOR" = "$EXPECTED_BOT" ]; then
+              echo "Verified: PR #${PR_NUM} authored by $PR_AUTHOR"
+              exit 0
+            fi
+            echo "::error::Release PR #${PR_NUM} authored by ${PR_AUTHOR}, expected ${EXPECTED_BOT}"
+            exit 1
+          fi
+          echo "::error::Could not verify release author (commit by ${AUTHOR}, no PR found)"
+          exit 1
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.develop_branch }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Extract tag from commit message
+        id: version
+        env:
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          TAG=$(printf '%s' "$MSG" | grep -oE 'v[0-9][0-9.]*' | head -1)
+          if [ -z "$TAG" ]; then
+            echo "::error::No valid tag found in commit message"
+            exit 1
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Create tag
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          BOT_USER: ${{ steps.app-token.outputs.app-slug }}[bot]
+        run: |
+          git config user.name "$BOT_USER"
+          git config user.email "${BOT_USER}@users.noreply.github.com"
+          git fetch --tags origin
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1; then
+            EXISTING=$(git rev-parse "refs/tags/$TAG^{commit}")
+            CURRENT=$(git rev-parse HEAD)
+            if [ "$EXISTING" != "$CURRENT" ]; then
+              echo "::error::Tag ${TAG} exists but points to ${EXISTING}, expected ${CURRENT}"
+              exit 1
+            fi
+            echo "Tag ${TAG} already exists on current commit, skipping."
+          else
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+          fi
+
+      - name: Extract release notes from changelog
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          VERSION="${TAG#v}"
+          SAFE_VERSION="$(printf '%s\n' "$VERSION" | sed 's/[][\\/.^$*+?{}|()]/\\&/g')"
+          if [ -f CHANGELOG.md ]; then
+            awk "/^## \[$SAFE_VERSION\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md > release-notes.md
+          fi
+          if [ ! -s release-notes.md ]; then
+            echo "Release ${TAG}" > release-notes.md
+          fi
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists, skipping."
+          else
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --notes-file release-notes.md
+          fi
+
+      - name: Mirror released branch
+        env:
+          DEVELOP: ${{ inputs.develop_branch }}
+          MAIN: ${{ inputs.main_branch }}
+        run: git push origin "$DEVELOP":"$MAIN" --force
