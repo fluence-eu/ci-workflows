@@ -77,11 +77,16 @@ jobs:
             --clobber
 
       - name: Configure gem credentials
+        env:
+          # Passing through env avoids expression interpolation into
+          # the shell command line and keeps the token out of any
+          # transient process argv.
+          GEM_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p ~/.gem
           cat > ~/.gem/credentials << EOF
           ---
-          :github: Bearer ${{ secrets.GITHUB_TOKEN }}
+          :github: Bearer ${GEM_TOKEN}
           EOF
           chmod 0600 ~/.gem/credentials
 

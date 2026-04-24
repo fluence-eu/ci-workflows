@@ -1,8 +1,10 @@
 name: Ruby Gem — Coverage Measure
 
-# Runs the gem's default rake task (typically rspec with SimpleCov
-# enabled) and uploads the resulting `coverage/` folder as the
-# `coverage` artifact.
+# Runs the gem's test task (rspec or minitest — pick via the
+# `rake_task` input, defaults to `spec`) with SimpleCov enabled,
+# and uploads the resulting `coverage/` folder as the `coverage`
+# artifact. Rubocop is intentionally not part of this task — it
+# runs in ruby-gem-rubocop-{measure,pr}.yml.
 #
 # Called from two places:
 # - the consumer's `coverage-measure.yml` on push to main, to produce
