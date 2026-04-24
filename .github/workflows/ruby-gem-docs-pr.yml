@@ -34,7 +34,7 @@ permissions:
 
 jobs:
   measure:
-    name: Measure & verify
+    name: Measure
     uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-measure.yml@v1
     with:
       ruby_version: ${{ inputs.ruby_version }}
@@ -100,8 +100,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: yardstick-base/
 
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+      - uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ inputs.ruby_version }}
           bundler-cache: true

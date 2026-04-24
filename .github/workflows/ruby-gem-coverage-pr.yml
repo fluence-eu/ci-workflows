@@ -86,8 +86,7 @@ jobs:
           path: _ci_workflows_
           token: ${{ steps.ci-bot-token.outputs.token }}
 
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+      - uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ inputs.ruby_version }}
           bundler-cache: true
