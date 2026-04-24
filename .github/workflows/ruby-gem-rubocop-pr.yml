@@ -1,0 +1,153 @@
+name: Ruby Gem — RuboCop PR Check
+
+# Runs on pull requests. Delegates the PR-head measurement to
+# ruby-gem-rubocop-measure.yml (same reusable used by main-push
+# baseline runs — zero duplication of the measure logic). Then
+# fetches the latest baseline from a main-push `rubocop-measure.yml`
+# run, posts a sticky PR comment with the before/after diff, and
+# fails if the PR introduced any rubocop offenses.
+#
+# Same baseline pattern as ruby-gem-coverage-pr.yml and
+# ruby-gem-docs-pr.yml.
+
+on:
+  workflow_call:
+    inputs:
+      ruby_version:
+        description: Ruby version for the runner
+        required: false
+        type: string
+        default: '4.0'
+      measure_workflow_file:
+        description: Consumer workflow filename that uploaded the `rubocop-report` artifact on the base branch (used to find the baseline).
+        required: false
+        type: string
+        default: 'rubocop-measure.yml'
+    secrets:
+      FLUENCE_CI_BOT_PRIVATE_KEY:
+        description: Private key of the read-only GitHub App used to checkout this central repo as a sidecar (to fetch `rubocop_report.rb`).
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    name: Measure
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-rubocop-measure.yml@v1
+    with:
+      ruby_version: ${{ inputs.ruby_version }}
+
+  comment:
+    name: Comment on PR
+    needs: measure
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+    steps:
+      - name: Checkout consumer repo
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Generate CI bot token (read-only access to ci-workflows)
+        id: ci-bot-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.FLUENCE_CI_BOT_ID }}
+          private-key: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
+          repositories: ci-workflows
+
+      - name: Checkout ci-workflows (for rubocop_report.rb)
+        uses: actions/checkout@v6
+        with:
+          repository: fluence-eu/ci-workflows
+          ref: v1
+          path: _ci_workflows_
+          token: ${{ steps.ci-bot-token.outputs.token }}
+
+      - name: Download PR rubocop report
+        uses: actions/download-artifact@v8
+        with:
+          name: rubocop-report
+          path: rubocop-pr/
+
+      - name: Find latest base-branch run with rubocop report
+        id: base-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_FILE: ${{ inputs.measure_workflow_file }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # `status=success` is silently ignored by the runs endpoint
+          # (success is a conclusion, not a status). Query completed
+          # runs and filter by .conclusion in jq.
+          RUN_ID=$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/${WORKFLOW_FILE}/runs?branch=${BASE_REF}&status=completed&per_page=20" \
+            --jq '[.workflow_runs[] | select(.conclusion == "success")][0].id // ""')
+          echo "id=$RUN_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Download base rubocop report
+        if: steps.base-run.outputs.id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: rubocop-report
+          run-id: ${{ steps.base-run.outputs.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: rubocop-base/
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ inputs.ruby_version }}
+          bundler-cache: true
+
+      - name: Build comment body
+        id: body
+        env:
+          # Used by the script to render GitHub blob links pointing at
+          # the PR head SHA, so each offense row is one-click-navigable.
+          GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          PR_REPORT="rubocop-pr/rubocop.json"
+          BASE_REPORT=""
+          if [ -f rubocop-base/rubocop.json ]; then
+            BASE_REPORT="rubocop-base/rubocop.json"
+          fi
+
+          BODY="$(ruby _ci_workflows_/.github/scripts/rubocop_report.rb \
+                   "${{ needs.measure.outputs.rubocop_outcome }}" \
+                   "origin/${{ github.base_ref }}" \
+                   "$PR_REPORT" "$BASE_REPORT")"
+
+          {
+            echo "body<<EOF"
+            echo "<!-- rubocop-report -->"
+            echo "$BODY"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Comment on PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BODY: ${{ steps.body.outputs.body }}
+        run: |
+          MARKER="<!-- rubocop-report -->"
+          PR=${{ github.event.pull_request.number }}
+          COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${PR}/comments" \
+            --paginate --jq "[.[] | select(.body | startswith(\"${MARKER}\"))][0].id // \"\"")
+
+          if [ -n "$COMMENT_ID" ]; then
+            gh api "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}" \
+              -X PATCH -f body="$BODY"
+          else
+            gh api "repos/${{ github.repository }}/issues/${PR}/comments" \
+              -f body="$BODY"
+          fi
+
+      - name: Fail if rubocop failed
+        run: |
+          [ "${{ needs.measure.outputs.rubocop_outcome }}" = "success" ]
