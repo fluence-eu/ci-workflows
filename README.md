@@ -119,7 +119,7 @@ Pull request
   └── ruby-gem-rubocop-pr.yml       — re-measure PR head + offenses diff + sticky comment
 ```
 
-Helper scripts (`coverage_report.rb`, `yardstick_report.rb`, `rubocop_report.rb`) live in this repo at `.github/scripts/`. The PR workflows fetch them via a sidecar checkout so consumers don't keep local copies.
+Helper scripts (`coverage_report.rb`, `yardstick_report.rb`, `rubocop_report.rb`) are wrapped as **composite actions** under `actions/{name}-report/`. The PR workflows call them via `uses: fluence-eu/ci-workflows/actions/{name}-report@v1` — no sidecar checkout, no additional GitHub App.
 
 ---
 
@@ -290,8 +290,6 @@ on:
 jobs:
   docs:
     uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-pr.yml@v1
-    secrets:
-      FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
     permissions:
       contents: read
       pull-requests: write
@@ -326,8 +324,6 @@ jobs:
     # with:
     #   rake_task:     'test'
     #   exclude_files: 'lib/my/gem/version.rb'  # undercover --exclude-files glob
-    secrets:
-      FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
     permissions:
       contents: read
       pull-requests: write
@@ -357,8 +353,6 @@ on:
 jobs:
   rubocop:
     uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-rubocop-pr.yml@v1
-    secrets:
-      FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
     permissions:
       contents: read
       pull-requests: write
@@ -375,12 +369,10 @@ Each consumer repo must expose:
 |---|---|---|
 | var | `RELEASE_APP_ID` | `ruby-gem-prepare-release.yml`, `app-prepare-release.yml`, `app-release.yml` |
 | secret | `RELEASE_APP_PRIVATE_KEY` | same |
-| var | `FLUENCE_CI_BOT_ID` | `ruby-gem-docs-pr.yml`, `ruby-gem-coverage-pr.yml`, `ruby-gem-rubocop-pr.yml` |
-| secret | `FLUENCE_CI_BOT_PRIVATE_KEY` | same |
 
 `GITHUB_TOKEN` is auto-provided by Actions — never declared in `secrets:`.
 
-`RELEASE_APP_*` is the write-capable app that opens release PRs, tags releases, and force-pushes mirrors. `FLUENCE_CI_BOT_*` is a read-only app used by PR workflows to sidecar-checkout this repo (to fetch the `.github/scripts/*_report.rb` helpers).
+`RELEASE_APP_*` is the write-capable app that opens release PRs, tags releases, and force-pushes mirrors. No second GitHub App is required — PR workflows pull their helper scripts via composite actions (`actions/*-report/`) which inherit the org's Actions access level.
 
 ---
 

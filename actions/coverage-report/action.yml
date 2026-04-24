@@ -1,0 +1,48 @@
+name: Coverage Report
+description: Render a sticky-comment Markdown body comparing the PR's SimpleCov coverage against the main-branch baseline.
+
+inputs:
+  outcome:
+    description: Outcome of the `undercover` check step (`success` or `failure`).
+    required: true
+  base_ref:
+    description: Git base ref (e.g. `origin/main`) used for the changed-files diff.
+    required: true
+  pr_path:
+    description: Path to the PR's SimpleCov resultset.
+    required: false
+    default: 'coverage/.resultset.json'
+  base_path:
+    description: Path to the baseline resultset, or empty when no baseline is available.
+    required: false
+    default: ''
+
+outputs:
+  body:
+    description: Markdown body (with sticky-comment marker) ready to post via `gh api`.
+    value: ${{ steps.render.outputs.body }}
+
+runs:
+  using: composite
+  steps:
+    - id: render
+      shell: bash
+      env:
+        # Blob-link anchor for per-file rows.
+        GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
+        OUTCOME: ${{ inputs.outcome }}
+        BASE_REF: ${{ inputs.base_ref }}
+        PR_PATH: ${{ inputs.pr_path }}
+        BASE_PATH: ${{ inputs.base_path }}
+      run: |
+        BODY="$(ruby "${GITHUB_ACTION_PATH}/coverage_report.rb" \
+          "$OUTCOME" \
+          "$BASE_REF" \
+          "$PR_PATH" \
+          "$BASE_PATH")"
+        {
+          echo "body<<EOF"
+          echo "<!-- coverage-report -->"
+          echo "$BODY"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"

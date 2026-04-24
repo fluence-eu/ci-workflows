@@ -24,10 +24,6 @@ on:
         required: false
         type: string
         default: 'docs-measure.yml'
-    secrets:
-      FLUENCE_CI_BOT_PRIVATE_KEY:
-        description: Private key of the read-only GitHub App used to checkout this central repo as a sidecar (to fetch `yardstick_report.rb`).
-        required: true
 
 permissions:
   contents: read
@@ -48,26 +44,9 @@ jobs:
       pull-requests: write
       actions: read
     steps:
-      - name: Checkout consumer repo
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Generate CI bot token (read-only access to ci-workflows)
-        id: ci-bot-token
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ vars.FLUENCE_CI_BOT_ID }}
-          private-key: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
-          repositories: ci-workflows
-
-      - name: Checkout ci-workflows (for yardstick_report.rb)
-        uses: actions/checkout@v6
-        with:
-          repository: fluence-eu/ci-workflows
-          ref: v1
-          path: _ci_workflows_
-          token: ${{ steps.ci-bot-token.outputs.token }}
 
       - name: Download PR yardstick report
         uses: actions/download-artifact@v8
@@ -105,30 +84,20 @@ jobs:
           ruby-version: ${{ inputs.ruby_version }}
           bundler-cache: true
 
-      - name: Build comment body
-        id: body
-        env:
-          # Used by the script to render GitHub blob links pointing at
-          # the PR head SHA, so each violation row is one-click-navigable.
-          GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
+      - name: Resolve baseline path
+        id: base
         run: |
-          PR_REPORT="yardstick-pr/yardstick_report.txt"
-          BASE_REPORT=""
           if [ -f yardstick-base/yardstick_report.txt ]; then
-            BASE_REPORT="yardstick-base/yardstick_report.txt"
+            echo "path=yardstick-base/yardstick_report.txt" >> "$GITHUB_OUTPUT"
           fi
 
-          BODY="$(ruby _ci_workflows_/.github/scripts/yardstick_report.rb \
-                   "${{ needs.measure.outputs.verify_outcome }}" \
-                   "origin/${{ github.base_ref }}" \
-                   "$PR_REPORT" "$BASE_REPORT")"
-
-          {
-            echo "body<<EOF"
-            echo "<!-- yardstick-report -->"
-            echo "$BODY"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+      - id: body
+        uses: fluence-eu/ci-workflows/actions/yardstick-report@v1
+        with:
+          outcome:   ${{ needs.measure.outputs.verify_outcome }}
+          base_ref:  origin/${{ github.base_ref }}
+          pr_path:   yardstick-pr/yardstick_report.txt
+          base_path: ${{ steps.base.outputs.path }}
 
       - name: Comment on PR
         env:

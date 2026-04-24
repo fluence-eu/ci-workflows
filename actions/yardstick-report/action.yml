@@ -1,0 +1,48 @@
+name: Yardstick Report
+description: Render a sticky-comment Markdown body comparing the PR's yardstick documentation-quality score against the main-branch baseline.
+
+inputs:
+  outcome:
+    description: Outcome of `rake doc:verify` (`success` or `failure`).
+    required: true
+  base_ref:
+    description: Git base ref (e.g. `origin/main`) used for the changed-files diff.
+    required: true
+  pr_path:
+    description: Path to the PR's yardstick report.
+    required: false
+    default: 'yardstick-pr/yardstick_report.txt'
+  base_path:
+    description: Path to the baseline report, or empty when no baseline is available.
+    required: false
+    default: ''
+
+outputs:
+  body:
+    description: Markdown body (with sticky-comment marker) ready to post via `gh api`.
+    value: ${{ steps.render.outputs.body }}
+
+runs:
+  using: composite
+  steps:
+    - id: render
+      shell: bash
+      env:
+        # Blob-link anchor for per-violation rows.
+        GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
+        OUTCOME: ${{ inputs.outcome }}
+        BASE_REF: ${{ inputs.base_ref }}
+        PR_PATH: ${{ inputs.pr_path }}
+        BASE_PATH: ${{ inputs.base_path }}
+      run: |
+        BODY="$(ruby "${GITHUB_ACTION_PATH}/yardstick_report.rb" \
+          "$OUTCOME" \
+          "$BASE_REF" \
+          "$PR_PATH" \
+          "$BASE_PATH")"
+        {
+          echo "body<<EOF"
+          echo "<!-- yardstick-report -->"
+          echo "$BODY"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"

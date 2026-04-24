@@ -85,14 +85,15 @@ GitHub auto-generates nice step display names from each action's `action.yml` me
 - Qualifying context (e.g. `Generate CI bot token (read-only access to ci-workflows)`)
 - Run scripts (no auto-name exists)
 
-### 6. Helper scripts via sidecar checkout
+### 6. Helper scripts via composite actions
 
-Ruby helpers (`coverage_report.rb`, `yardstick_report.rb`, `rubocop_report.rb`) live in `.github/scripts/` of this repo and are fetched at runtime by PR workflows using `actions/checkout` with the `FLUENCE_CI_BOT` GitHub App token. Consumers don't keep local copies.
+Ruby helpers (`coverage_report.rb`, `yardstick_report.rb`, `rubocop_report.rb`) are wrapped as composite actions under `actions/{name}-report/`. Each composite action declares its inputs, calls the Ruby script via `${GITHUB_ACTION_PATH}`, and exposes the Markdown body as an output. The reusable PR workflows consume them via `uses: fluence-eu/ci-workflows/actions/{name}-report@v1` — no sidecar checkout, no dedicated GitHub App.
 
 When you add a helper:
-- Put it in `.github/scripts/`
-- Reference it from the reusable workflow via `_ci_workflows_/.github/scripts/<file>.rb` (the sidecar checkout path)
-- Make it resilient to partial inputs (`rescue` / nil-guard missing artifacts — the baseline may be absent on the very first run)
+- Create `actions/<name>-report/` with an `action.yml` (declare inputs + `outputs.body.value`) and the Ruby script next to it
+- `action.yml` runs `ruby "${GITHUB_ACTION_PATH}/<name>_report.rb" "$ARG1" ...` inside a composite step, passes args through `env:` (never inline `${{ inputs.x }}` in the shell command — see #4)
+- Make the script resilient to partial inputs (`rescue` / nil-guard missing artifacts — the baseline may be absent on the very first run)
+- Reference the composite action from the consuming reusable PR workflow
 
 ---
 

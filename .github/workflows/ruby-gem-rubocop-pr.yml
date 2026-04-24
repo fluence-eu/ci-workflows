@@ -23,10 +23,6 @@ on:
         required: false
         type: string
         default: 'rubocop-measure.yml'
-    secrets:
-      FLUENCE_CI_BOT_PRIVATE_KEY:
-        description: Private key of the read-only GitHub App used to checkout this central repo as a sidecar (to fetch `rubocop_report.rb`).
-        required: true
 
 permissions:
   contents: read
@@ -47,26 +43,9 @@ jobs:
       pull-requests: write
       actions: read
     steps:
-      - name: Checkout consumer repo
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Generate CI bot token (read-only access to ci-workflows)
-        id: ci-bot-token
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ vars.FLUENCE_CI_BOT_ID }}
-          private-key: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
-          repositories: ci-workflows
-
-      - name: Checkout ci-workflows (for rubocop_report.rb)
-        uses: actions/checkout@v6
-        with:
-          repository: fluence-eu/ci-workflows
-          ref: v1
-          path: _ci_workflows_
-          token: ${{ steps.ci-bot-token.outputs.token }}
 
       - name: Download PR rubocop report
         uses: actions/download-artifact@v8
@@ -104,30 +83,20 @@ jobs:
           ruby-version: ${{ inputs.ruby_version }}
           bundler-cache: true
 
-      - name: Build comment body
-        id: body
-        env:
-          # Used by the script to render GitHub blob links pointing at
-          # the PR head SHA, so each offense row is one-click-navigable.
-          GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
+      - name: Resolve baseline path
+        id: base
         run: |
-          PR_REPORT="rubocop-pr/rubocop.json"
-          BASE_REPORT=""
           if [ -f rubocop-base/rubocop.json ]; then
-            BASE_REPORT="rubocop-base/rubocop.json"
+            echo "path=rubocop-base/rubocop.json" >> "$GITHUB_OUTPUT"
           fi
 
-          BODY="$(ruby _ci_workflows_/.github/scripts/rubocop_report.rb \
-                   "${{ needs.measure.outputs.rubocop_outcome }}" \
-                   "origin/${{ github.base_ref }}" \
-                   "$PR_REPORT" "$BASE_REPORT")"
-
-          {
-            echo "body<<EOF"
-            echo "<!-- rubocop-report -->"
-            echo "$BODY"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+      - id: body
+        uses: fluence-eu/ci-workflows/actions/rubocop-report@v1
+        with:
+          outcome:   ${{ needs.measure.outputs.rubocop_outcome }}
+          base_ref:  origin/${{ github.base_ref }}
+          pr_path:   rubocop-pr/rubocop.json
+          base_path: ${{ steps.base.outputs.path }}
 
       - name: Comment on PR
         env:

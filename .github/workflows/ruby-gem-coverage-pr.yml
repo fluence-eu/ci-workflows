@@ -40,10 +40,6 @@ on:
         required: false
         type: string
         default: ''
-    secrets:
-      FLUENCE_CI_BOT_PRIVATE_KEY:
-        description: Private key of the read-only GitHub App used to checkout this central repo as a sidecar (to fetch `coverage_report.rb`).
-        required: true
 
 permissions:
   contents: read
@@ -65,26 +61,9 @@ jobs:
       pull-requests: write
       actions: read
     steps:
-      - name: Checkout consumer repo
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Generate CI bot token (read-only access to ci-workflows)
-        id: ci-bot-token
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ vars.FLUENCE_CI_BOT_ID }}
-          private-key: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
-          repositories: ci-workflows
-
-      - name: Checkout ci-workflows (for coverage_report.rb)
-        uses: actions/checkout@v6
-        with:
-          repository: fluence-eu/ci-workflows
-          ref: v1
-          path: _ci_workflows_
-          token: ${{ steps.ci-bot-token.outputs.token }}
 
       - uses: ruby/setup-ruby@v1
         with:
@@ -140,22 +119,27 @@ jobs:
             $EXCLUDE_ARG \
             --simplecov coverage/coverage.json
 
+      - name: Resolve baseline path
+        id: base
+        run: |
+          if [ -f coverage-base/.resultset.json ]; then
+            echo "path=coverage-base/.resultset.json" >> "$GITHUB_OUTPUT"
+          fi
+
+      - id: body
+        uses: fluence-eu/ci-workflows/actions/coverage-report@v1
+        with:
+          outcome:   ${{ steps.coverage.outcome }}
+          base_ref:  origin/${{ github.base_ref }}
+          pr_path:   coverage/.resultset.json
+          base_path: ${{ steps.base.outputs.path }}
+
       - name: Comment on PR
         env:
           GH_TOKEN: ${{ github.token }}
+          BODY: ${{ steps.body.outputs.body }}
         run: |
           MARKER="<!-- coverage-report -->"
-          BASE_RESULTSET=""
-          if [ -f coverage-base/.resultset.json ]; then
-            BASE_RESULTSET="coverage-base/.resultset.json"
-          fi
-          BODY="$(ruby _ci_workflows_/.github/scripts/coverage_report.rb \
-                   "${{ steps.coverage.outcome }}" \
-                   "origin/${{ github.base_ref }}" \
-                   "coverage/.resultset.json" \
-                   "$BASE_RESULTSET")"
-          BODY="${MARKER}"$'\n'"${BODY}"
-
           PR=${{ github.event.pull_request.number }}
           COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${PR}/comments" \
             --paginate --jq "[.[] | select(.body | startswith(\"${MARKER}\"))][0].id // \"\"")
