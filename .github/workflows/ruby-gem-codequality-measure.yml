@@ -50,9 +50,10 @@ jobs:
         continue-on-error: true
         env:
           PATHS: ${{ inputs.paths }}
-        # Reek exits non-zero on findings, but `continue-on-error`
-        # keeps the workflow alive so flog and flay still run.
-        run: bundle exec reek --format json --output reek.json $PATHS
+        # Reek prints to stdout (it has no --output flag) and exits
+        # non-zero on findings; `continue-on-error` keeps the workflow
+        # alive so flog and flay still run.
+        run: bundle exec reek --format json $PATHS > reek.json
 
       - name: Run flog (complexity)
         continue-on-error: true
