@@ -53,10 +53,24 @@ jobs:
           ruby-version: ${{ inputs.ruby_version }}
           bundler-cache: true
 
+      - name: Cache brakeman analysis
+        uses: actions/cache@v5
+        with:
+          path: tmp/brakeman
+          # The cache must vary with anything that affects the binary
+          # parser output: Ruby runtime (inputs.ruby_version, the source
+          # of truth for setup-ruby), bundled brakeman version
+          # (Gemfile.lock), and brakeman's own config (`.brakeman.yml`,
+          # `config/brakeman.ignore` if present). hashFiles silently
+          # ignores missing files. restore-keys keeps the same
+          # Ruby-version prefix so a fallback never crosses runtimes.
+          key: brakeman-${{ runner.os }}-${{ inputs.ruby_version }}-${{ hashFiles('Gemfile.lock', '.brakeman.yml', 'config/brakeman.ignore') }}
+          restore-keys: brakeman-${{ runner.os }}-${{ inputs.ruby_version }}-
+
       - name: Run brakeman (Rails static analysis)
         id: brakeman
         continue-on-error: true
-        run: bundle exec brakeman --no-pager --format json --output brakeman.json
+        run: bundle exec brakeman --no-pager --format json --output brakeman.json --cache-dir tmp/brakeman
 
       - name: Run bundler-audit (gem CVE scan)
         id: audit
