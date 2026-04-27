@@ -1,0 +1,117 @@
+name: Rails — Security PR Check
+
+# Runs on pull requests. Delegates the PR-head measurement to
+# rails-security-measure.yml (same reusable used by main-push
+# baseline runs — zero duplication of the measure logic). Then
+# fetches the latest baseline from a working-branch
+# `security-measure.yml` run, posts a sticky PR comment with the
+# before/after diff (new brakeman warnings via fingerprint, new
+# bundler-audit advisories via CVE-ID), and fails if either tool
+# reported any finding.
+#
+# Same baseline pattern as ruby-gem-{docs,coverage,rubocop}-pr.yml.
+
+on:
+  workflow_call:
+    inputs:
+      ruby_version:
+        description: Ruby version for the runner.
+        required: false
+        type: string
+        default: '4.0'
+      measure_workflow_file:
+        description: Consumer workflow filename that uploaded the `security-report` artifact on the base branch (used to find the baseline).
+        required: false
+        type: string
+        default: 'security-measure.yml'
+    secrets:
+      FLUENCE_CI_BOT_PRIVATE_KEY:
+        description: Optional GitHub App private key used to author the sticky PR comment. When omitted, the comment is posted as `github-actions[bot]` via the default `GITHUB_TOKEN`.
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    name: Measure
+    uses: fluence-eu/ci-workflows/.github/workflows/rails-security-measure.yml@v1
+    with:
+      ruby_version: ${{ inputs.ruby_version }}
+
+  comment:
+    name: Comment on PR
+    needs: measure
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download PR security report
+        uses: actions/download-artifact@v8
+        with:
+          name: security-report
+          path: security-pr/
+
+      - name: Find latest base-branch run with security report
+        id: base-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_FILE: ${{ inputs.measure_workflow_file }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # `status=success` is silently ignored by the runs endpoint
+          # (success is a conclusion, not a status). Query completed
+          # runs and filter by .conclusion in jq.
+          RUN_ID=$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/${WORKFLOW_FILE}/runs?branch=${BASE_REF}&status=completed&per_page=20" \
+            --jq '[.workflow_runs[] | select(.conclusion == "success")][0].id // ""')
+          echo "id=$RUN_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Download base security report
+        if: steps.base-run.outputs.id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: security-report
+          run-id: ${{ steps.base-run.outputs.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: security-base/
+
+      - name: Resolve baseline paths
+        id: base
+        run: |
+          if [ -f security-base/brakeman.json ]; then
+            echo "brakeman=security-base/brakeman.json" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -f security-base/audit.txt ]; then
+            echo "audit=security-base/audit.txt" >> "$GITHUB_OUTPUT"
+          fi
+
+      - id: body
+        uses: fluence-eu/ci-workflows/actions/security-report@v1
+        with:
+          brakeman_outcome:   ${{ needs.measure.outputs.brakeman_outcome }}
+          audit_outcome:      ${{ needs.measure.outputs.audit_outcome }}
+          brakeman_path:      security-pr/brakeman.json
+          audit_path:         security-pr/audit.txt
+          base_brakeman_path: ${{ steps.base.outputs.brakeman }}
+          base_audit_path:    ${{ steps.base.outputs.audit }}
+
+      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v1
+        with:
+          marker:          '<!-- security-report -->'
+          body:            ${{ steps.body.outputs.body }}
+          app-id:          ${{ vars.FLUENCE_CI_BOT_ID }}
+          app-private-key: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
+
+      - name: Fail if either scan flagged findings
+        if: needs.measure.outputs.brakeman_outcome == 'failure' || needs.measure.outputs.audit_outcome == 'failure'
+        run: |
+          echo "::error::Security scan failed (brakeman: ${{ needs.measure.outputs.brakeman_outcome }}, bundler-audit: ${{ needs.measure.outputs.audit_outcome }})"
+          exit 1
