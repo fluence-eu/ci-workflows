@@ -51,7 +51,7 @@ permissions:
 jobs:
   measure:
     name: Measure
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-measure.yml@v1
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-measure.yml@v2
     with:
       ruby_version: ${{ inputs.ruby_version }}
       rake_task: ${{ inputs.rake_task }}
@@ -131,14 +131,14 @@ jobs:
           fi
 
       - id: body
-        uses: fluence-eu/ci-workflows/actions/coverage-report@v1
+        uses: fluence-eu/ci-workflows/actions/coverage-report@v2
         with:
           outcome:   ${{ steps.coverage.outcome }}
           base_ref:  origin/${{ github.base_ref }}
           pr_path:   coverage/.resultset.json
           base_path: ${{ steps.base.outputs.path }}
 
-      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v1
+      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v2
         with:
           marker:          '<!-- coverage-report -->'
           body:            ${{ steps.body.outputs.body }}
