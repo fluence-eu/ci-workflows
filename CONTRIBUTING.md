@@ -2,11 +2,16 @@
 
 Thanks for contributing! This repo hosts reusable GitHub Actions workflows shared across [fluence-eu](https://github.com/fluence-eu) projects. Every change is consumed automatically by those repos once `@v1` moves, so small mistakes have a wide blast radius.
 
-1. Open an issue to discuss the proposed change
-2. Create a branch from `main`
+**Direct push to `main` is forbidden.** All changes — including doc updates and one-line fixes — go through a pull request. The `@v1` tag is moved by the maintainer who merges the PR, so any drift between `main` and `v1` reflects an explicit decision (e.g. cutting a new major).
+
+Standard flow:
+
+1. Open an issue to discuss the proposed change (skip for trivial doc fixes)
+2. Create a branch from `main` — naming convention: `<type>/<short-description>` (e.g. `feat/cache-rubocop-yard`, `fix/docs-pr-secret`, `refactor/extract-app-actions`, `chore/contributing`, `docs/update-readme`)
 3. Implement the change
-4. Test it end-to-end from a consumer PR (see below)
+4. Test it end-to-end from a consumer PR (see "Testing changes" below)
 5. Open a pull request targeting `main`
+6. After merge — move `@v1` to the new main HEAD if the change is non-breaking (see "Versioning" below)
 
 ---
 
@@ -17,11 +22,14 @@ Thanks for contributing! This repo hosts reusable GitHub Actions workflows share
   workflows/
     ruby-gem-*.yml           # Ruby gem pipeline (semver, build + package push)
     app-*.yml                # Rolling-release app pipeline (timestamp tag + mirror)
-  scripts/
-    coverage_report.rb       # Helpers fetched via sidecar checkout by PR workflows
-    yardstick_report.rb
-    rubocop_report.rb
+actions/
+  coverage-report/           # Composite actions wrapping Ruby helper scripts
+  yardstick-report/          # (action.yml + the .rb script next to it)
+  rubocop-report/
+  post-sticky-comment/       # Generic sticky-comment poster, dual-mode
+                             # (App-authored when secret forwarded, else github-actions[bot])
 README.md                    # Consumer-facing usage docs
+CONTRIBUTING.md              # This file
 ```
 
 Two family prefixes:
@@ -101,12 +109,17 @@ When you add a helper:
 
 ### `@v1` is mobile
 
-The `v1` tag is force-moved to every new commit on `main`. Consumers pin `@v1` and pick up non-breaking changes automatically. When you merge to main, also move the tag:
+The `v1` tag is force-moved to every new commit on `main`. Consumers pin `@v1` and pick up non-breaking changes automatically. **The maintainer merging a PR is responsible for moving the tag** — there is no automation today, the move is an explicit step that gates the change reaching consumers.
 
 ```bash
+# After merging the PR on GitHub, locally:
+git fetch origin main
+git checkout main && git pull
 git tag -f v1
 git push origin v1 --force
 ```
+
+If your PR contains a breaking change (see below), do not move `v1` — cut a new `v2` instead.
 
 ### What counts as breaking
 
@@ -166,7 +179,7 @@ Conventional Commits, same as the Ruby gem repos:
 [body explaining *why* the change is needed]
 ```
 
-Types we use here: `feat`, `fix`, `refactor`, `chore`, `docs`, `ci`. Scope is usually the reusable short name (`docs-pr`, `coverage-measure`, `app-release`) or `scripts` for the `.github/scripts/` helpers.
+Types we use here: `feat`, `fix`, `refactor`, `chore`, `docs`, `ci`. Scope is usually the reusable short name (`docs-pr`, `coverage-measure`, `app-release`) or the composite action short name (`coverage-report`, `yardstick-report`, `rubocop-report`, `post-sticky-comment`).
 
 Do not include `Co-Authored-By:` trailers or any AI attribution.
 
