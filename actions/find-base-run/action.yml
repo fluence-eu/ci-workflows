@@ -1,0 +1,49 @@
+name: Find latest base-branch run
+description: |
+  Look up the most recent successful run of a given workflow file on
+  the PR's base branch, returning its run id. Empty string when none
+  exists — including the case where the workflow file isn't yet
+  known on the base branch (the PR introducing it).
+
+inputs:
+  workflow_file:
+    description: Filename of the consumer's measure workflow (e.g. `codequality-measure.yml`).
+    required: true
+  base_ref:
+    description: Branch to look up runs on.
+    required: false
+    default: ${{ github.base_ref }}
+  github_token:
+    description: Token used to call the GitHub API.
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  id:
+    description: Run id of the latest successful baseline, or empty string if none.
+    value: ${{ steps.lookup.outputs.id }}
+
+runs:
+  using: composite
+  steps:
+    - id: lookup
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        WORKFLOW_FILE: ${{ inputs.workflow_file }}
+        BASE_REF: ${{ inputs.base_ref }}
+        REPO: ${{ github.repository }}
+      run: |
+        # `status=success` is silently ignored by the runs endpoint
+        # (success is a conclusion, not a status). Query completed
+        # runs and filter by .conclusion in jq.
+        #
+        # `2>/dev/null || echo ''` swallows the 404 the API returns
+        # when the workflow file isn't yet known on the base branch
+        # (the case for the PR that introduces the workflow). Without
+        # it, set -e would abort the step before the "missing
+        # baseline" branches downstream kick in.
+        RUN_ID="$(gh api \
+          "repos/${REPO}/actions/workflows/${WORKFLOW_FILE}/runs?branch=${BASE_REF}&status=completed&per_page=20" \
+          --jq '[.workflow_runs[] | select(.conclusion == "success")][0].id // ""' 2>/dev/null || echo '')"
+        echo "id=$RUN_ID" >> "$GITHUB_OUTPUT"

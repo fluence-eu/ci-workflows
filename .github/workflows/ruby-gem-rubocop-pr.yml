@@ -59,18 +59,9 @@ jobs:
 
       - name: Find latest base-branch run with rubocop report
         id: base-run
-        env:
-          GH_TOKEN: ${{ github.token }}
-          WORKFLOW_FILE: ${{ inputs.measure_workflow_file }}
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          # `status=success` is silently ignored by the runs endpoint
-          # (success is a conclusion, not a status). Query completed
-          # runs and filter by .conclusion in jq.
-          RUN_ID=$(gh api \
-            "repos/${{ github.repository }}/actions/workflows/${WORKFLOW_FILE}/runs?branch=${BASE_REF}&status=completed&per_page=20" \
-            --jq '[.workflow_runs[] | select(.conclusion == "success")][0].id // ""')
-          echo "id=$RUN_ID" >> "$GITHUB_OUTPUT"
+        uses: fluence-eu/ci-workflows/actions/find-base-run@v2
+        with:
+          workflow_file: ${{ inputs.measure_workflow_file }}
 
       - name: Download base rubocop report
         if: steps.base-run.outputs.id != ''
