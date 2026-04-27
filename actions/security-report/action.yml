@@ -1,0 +1,60 @@
+name: Security Report
+description: Render a sticky-comment Markdown body summarising brakeman and bundler-audit findings.
+
+inputs:
+  brakeman_outcome:
+    description: Outcome of the brakeman step (`success` or `failure`).
+    required: true
+  audit_outcome:
+    description: Outcome of the bundler-audit step (`success` or `failure`).
+    required: true
+  brakeman_path:
+    description: Path to brakeman's JSON report (PR head).
+    required: false
+    default: 'brakeman.json'
+  audit_path:
+    description: Path to bundler-audit's captured text output (PR head).
+    required: false
+    default: 'audit.txt'
+  base_brakeman_path:
+    description: Path to the baseline brakeman JSON report. Empty when no baseline is available — the report falls back to a current-state-only view.
+    required: false
+    default: ''
+  base_audit_path:
+    description: Path to the baseline bundler-audit text output. Empty when no baseline is available.
+    required: false
+    default: ''
+
+outputs:
+  body:
+    description: Markdown body (with sticky-comment marker) ready to post via `gh api`.
+    value: ${{ steps.render.outputs.body }}
+
+runs:
+  using: composite
+  steps:
+    - id: render
+      shell: bash
+      env:
+        # Blob-link anchor for per-warning rows.
+        GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
+        BRAKEMAN_OUTCOME: ${{ inputs.brakeman_outcome }}
+        AUDIT_OUTCOME: ${{ inputs.audit_outcome }}
+        BRAKEMAN_PATH: ${{ inputs.brakeman_path }}
+        AUDIT_PATH: ${{ inputs.audit_path }}
+        BASE_BRAKEMAN_PATH: ${{ inputs.base_brakeman_path }}
+        BASE_AUDIT_PATH: ${{ inputs.base_audit_path }}
+      run: |
+        BODY="$(ruby "${GITHUB_ACTION_PATH}/security_report.rb" \
+          "$BRAKEMAN_OUTCOME" \
+          "$AUDIT_OUTCOME" \
+          "$BRAKEMAN_PATH" \
+          "$AUDIT_PATH" \
+          "$BASE_BRAKEMAN_PATH" \
+          "$BASE_AUDIT_PATH")"
+        {
+          echo "body<<EOF"
+          echo "<!-- security-report -->"
+          echo "$BODY"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"

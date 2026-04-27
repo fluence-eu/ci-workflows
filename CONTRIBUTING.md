@@ -22,6 +22,7 @@ Standard flow:
   workflows/
     ruby-gem-*.yml           # Ruby gem pipeline (semver, build + package push)
     app-*.yml                # Rolling-release app pipeline (timestamp tag + mirror)
+    rails-*.yml              # Rails-app-specific checks (brakeman, bundler-audit, …)
 actions/
   coverage-report/           # Composite actions wrapping Ruby helper scripts
   yardstick-report/          # (action.yml + the .rb script next to it)
@@ -32,11 +33,12 @@ README.md                    # Consumer-facing usage docs
 CONTRIBUTING.md              # This file
 ```
 
-Two family prefixes:
+Family prefixes:
 - `ruby-gem-*` — semver-released Ruby gems with `.gemspec` + GitHub Packages push.
 - `app-*` — rolling-release apps (any language): timestamp tag, changelog auto-merged on `develop`, force-push mirror to `main`.
+- `rails-*` — Rails-app-specific checks (security scan, future test/coverage variants with postgres, etc.). Use this prefix only for reusables that genuinely need Rails (not just Ruby).
 
-If you need a new family, coordinate on the issue first — consumers already pin `@v1` across both.
+If you need a new family, coordinate on the issue first — consumers already pin `@v1` across all three.
 
 ---
 

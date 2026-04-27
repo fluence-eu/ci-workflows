@@ -2,12 +2,13 @@
 
 Reusable GitHub Actions workflows shared across [fluence-eu](https://github.com/fluence-eu) Ruby projects — **gems** (semver release + packages push) and **apps** (rolling release + main mirror).
 
-Two workflow families live side-by-side:
+Workflow families:
 
 | Prefix | Pattern | Used by |
 |---|---|---|
 | `ruby-gem-*` | Semver bump, `.gemspec` build, attach to GitHub Release, push to GitHub Packages | `fluence-gateway-client`, `fluence-gateway-auth`, `mosaic-sdk` |
 | `app-*` | Timestamp tag, git-cliff changelog auto-merged on `develop`, force-push mirror to `main` | `gateway` |
+| `rails-*` | Rails-app-specific checks (brakeman, bundler-audit, etc.) | `gateway` |
 
 For contributor guidelines and design principles, see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
@@ -25,9 +26,9 @@ For contributor guidelines and design principles, see [CONTRIBUTING.md](./CONTRI
 | `app-prepare-release.yml` | `prepare-release.yml` | `workflow_dispatch` | Generate timestamp tag, run git-cliff, open + auto-merge release PR |
 | `app-release.yml` | `release.yml` | `push` on the working branch + `paths: CHANGELOG.md` | Verify bot author, create tag + GitHub Release, force-push working→released branch |
 
-### Quality gates (docs, coverage, lint, codequality)
+### Quality gates (docs, coverage, lint, security, codequality)
 
-Each gate follows the same **measure + PR** pattern. The `*-measure.yml` reusable produces a baseline artifact on push to main; the `*-pr.yml` reusable re-measures the PR head via nested reusable, downloads the baseline via workflow-runs API, and posts a sticky PR comment comparing the two.
+Each gate follows the same **measure + PR** pattern. The `*-measure.yml` reusable produces a baseline artifact on push to the working branch; the `*-pr.yml` reusable re-measures the PR head via nested reusable, downloads the baseline via workflow-runs API, and posts a sticky PR comment comparing the two.
 
 Most gates are **strict** — the PR fails when findings are introduced. The codequality gate is **advisory** — reek / flog / flay are surfaced as deltas and trends, no fail.
 
@@ -39,6 +40,8 @@ Most gates are **strict** — the PR fails when findings are introduced. The cod
 | `ruby-gem-coverage-pr.yml` | `coverage-pr.yml` | `pull_request` | strict | Measure PR head + run undercover vs baseline, sticky comment, fail on regression |
 | `ruby-gem-rubocop-measure.yml` | `rubocop-measure.yml` | `push main` | strict | Run rubocop `--format json`, upload `rubocop-report` baseline |
 | `ruby-gem-rubocop-pr.yml` | `rubocop-pr.yml` | `pull_request` | strict | Measure PR head + diff offenses vs baseline, sticky comment, fail if any offense |
+| `rails-security-measure.yml` | `security-measure.yml` | `push` working branch | strict | Run brakeman + bundler-audit, upload `security-report` baseline (`brakeman.json` + `audit.txt`) |
+| `rails-security-pr.yml` | `security-pr.yml` | `pull_request` | strict | Measure PR head + diff vs baseline (brakeman fingerprints + CVE IDs), sticky comment, fail on findings |
 | `ruby-gem-codequality-measure.yml` | `codequality-measure.yml` | `push main` | advisory | Run reek + flog + flay, upload `codequality-report` baseline (`reek.json` + `flog.txt` + `flay.txt`) |
 | `ruby-gem-codequality-pr.yml` | `codequality-pr.yml` | `pull_request` | advisory | Measure PR head + diff vs baseline (reek smells + flog/flay scores), sticky comment, **never fails** |
 
