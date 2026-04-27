@@ -179,7 +179,7 @@ Conventional Commits, same as the Ruby gem repos:
 [body explaining *why* the change is needed]
 ```
 
-Types we use here: `feat`, `fix`, `refactor`, `chore`, `docs`, `ci`. Scope is usually the reusable short name (`docs-pr`, `coverage-measure`, `app-release`) or `scripts` for the `.github/scripts/` helpers.
+Types we use here: `feat`, `fix`, `refactor`, `chore`, `docs`, `ci`. Scope is usually the reusable short name (`docs-pr`, `coverage-measure`, `app-release`) or the composite action short name (`coverage-report`, `yardstick-report`, `rubocop-report`, `post-sticky-comment`).
 
 Do not include `Co-Authored-By:` trailers or any AI attribution.
 
