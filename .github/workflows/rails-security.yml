@@ -22,6 +22,10 @@ on:
         required: false
         type: string
         default: '4.0'
+    secrets:
+      FLUENCE_CI_BOT_PRIVATE_KEY:
+        description: Optional GitHub App private key used to author the sticky PR comment. When omitted, the comment is posted as `github-actions[bot]` via the default `GITHUB_TOKEN`.
+        required: false
 
 permissions:
   contents: read
@@ -30,6 +34,9 @@ jobs:
   scan:
     name: Security scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
 
     steps:
       - uses: actions/checkout@v6
@@ -42,15 +49,41 @@ jobs:
       - name: Run brakeman (Rails static analysis)
         id: brakeman
         continue-on-error: true
-        run: bundle exec brakeman --no-pager
+        # JSON output feeds the security-report composite. The
+        # readable text view lives in the sticky PR comment instead
+        # of the workflow logs.
+        run: bundle exec brakeman --no-pager --format json --output brakeman.json
 
       - name: Run bundler-audit (gem CVE scan)
         id: audit
         continue-on-error: true
         # `--update` refreshes the local CVE database before the
         # check so a vulnerability disclosed since the previous run
-        # is still caught.
-        run: bundle exec bundler-audit check --update
+        # is still caught. `tee` keeps the human-readable output
+        # both in the logs and on disk for the report composite;
+        # `pipefail` preserves bundler-audit's exit code through
+        # the pipe so `continue-on-error` records the right outcome.
+        shell: bash
+        run: |
+          set -o pipefail
+          bundle exec bundler-audit check --update | tee audit.txt
+
+      - id: body
+        if: github.event_name == 'pull_request'
+        uses: fluence-eu/ci-workflows/actions/security-report@v1
+        with:
+          brakeman_outcome: ${{ steps.brakeman.outcome }}
+          audit_outcome:    ${{ steps.audit.outcome }}
+          brakeman_path:    brakeman.json
+          audit_path:       audit.txt
+
+      - if: github.event_name == 'pull_request'
+        uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v1
+        with:
+          marker:          '<!-- security-report -->'
+          body:            ${{ steps.body.outputs.body }}
+          app-id:          ${{ vars.FLUENCE_CI_BOT_ID }}
+          app-private-key: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
 
       - name: Fail if either scan flagged findings
         if: steps.brakeman.outcome == 'failure' || steps.audit.outcome == 'failure'
