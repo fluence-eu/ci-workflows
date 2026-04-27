@@ -46,9 +46,22 @@ jobs:
           ruby-version: ${{ inputs.ruby_version }}
           bundler-cache: true
 
+      - name: Cache rubocop analysis
+        uses: actions/cache@v5
+        with:
+          path: tmp/rubocop
+          # Hash on files that invalidate rubocop's parser cache:
+          # rubocop config, Ruby version, lockfile (apps) or gemspec (gems).
+          # hashFiles silently ignores missing files so the same key works
+          # for both project shapes.
+          key: rubocop-${{ runner.os }}-${{ hashFiles('.ruby-version', '**/.rubocop.yml', '**/.rubocop_todo.yml', 'Gemfile.lock', '*.gemspec') }}
+          restore-keys: rubocop-${{ runner.os }}-
+
       - name: Run rubocop
         id: rubocop
         continue-on-error: true
+        env:
+          RUBOCOP_CACHE_ROOT: tmp/rubocop
         run: |
           mkdir -p rubocop-report
           bundle exec rubocop --format json --out rubocop-report/rubocop.json
