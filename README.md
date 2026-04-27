@@ -2,12 +2,13 @@
 
 Reusable GitHub Actions workflows shared across [fluence-eu](https://github.com/fluence-eu) Ruby projects — **gems** (semver release + packages push) and **apps** (rolling release + main mirror).
 
-Two workflow families live side-by-side:
+Workflow families:
 
 | Prefix | Pattern | Used by |
 |---|---|---|
 | `ruby-gem-*` | Semver bump, `.gemspec` build, attach to GitHub Release, push to GitHub Packages | `fluence-gateway-client`, `fluence-gateway-auth`, `mosaic-sdk` |
 | `app-*` | Timestamp tag, git-cliff changelog auto-merged on `develop`, force-push mirror to `main` | `gateway` |
+| `rails-*` | Rails-app-specific checks (brakeman, bundler-audit, etc.) | `gateway` |
 
 For contributor guidelines and design principles, see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
@@ -43,6 +44,14 @@ Each gate follows the same **measure + PR** pattern. The `*-measure.yml` reusabl
 | Central workflow | Consumer file | Trigger | Role |
 |---|---|---|---|
 | `ruby-gem-docs-deploy.yml` | `docs-deploy.yml` | `push main` + optional `workflow_dispatch` | Build YARD site, deploy to GitHub Pages |
+
+### Security (Rails apps)
+
+Single-purpose workflow that runs both brakeman and bundler-audit. No measure/baseline — security scans are stateless: clean or flagged. Both tools run with `continue-on-error` so a brakeman failure doesn't hide bundler-audit findings (and vice versa).
+
+| Central workflow | Consumer file | Trigger | Role |
+|---|---|---|---|
+| `rails-security.yml` | `security.yml` (typically) | `pull_request` (+ optionally `push` on the working branch) | Run brakeman + bundler-audit, fail if either flags findings |
 
 ---
 

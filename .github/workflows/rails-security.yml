@@ -1,0 +1,59 @@
+name: Rails — Security Scan
+
+# Runs brakeman (Rails-specific static analysis) and bundler-audit
+# (CVE scan against the lockfile) on a Rails app, fails the workflow
+# if either tool reports any finding.
+#
+# Both tools run with continue-on-error so a brakeman failure does
+# not hide bundler-audit findings (and vice versa) — devs see both
+# reports on a single CI run before fixing.
+#
+# Pattern target: Rails apps that have brakeman + bundler-audit in
+# their Gemfile development group (or as runtime gems). Scope is
+# Rails-specific because brakeman only understands Rails apps;
+# bundler-audit is gem-agnostic but typically bundled with brakeman
+# for Rails security baselines.
+
+on:
+  workflow_call:
+    inputs:
+      ruby_version:
+        description: Ruby version for the runner.
+        required: false
+        type: string
+        default: '4.0'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Security scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ inputs.ruby_version }}
+          bundler-cache: true
+
+      - name: Run brakeman (Rails static analysis)
+        id: brakeman
+        continue-on-error: true
+        run: bundle exec brakeman --no-pager
+
+      - name: Run bundler-audit (gem CVE scan)
+        id: audit
+        continue-on-error: true
+        # `--update` refreshes the local CVE database before the
+        # check so a vulnerability disclosed since the previous run
+        # is still caught.
+        run: bundle exec bundler-audit check --update
+
+      - name: Fail if either scan flagged findings
+        if: steps.brakeman.outcome == 'failure' || steps.audit.outcome == 'failure'
+        run: |
+          echo "::error::Security scan failed (brakeman: ${{ steps.brakeman.outcome }}, bundler-audit: ${{ steps.audit.outcome }})"
+          exit 1
