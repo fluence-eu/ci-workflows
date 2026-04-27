@@ -25,18 +25,22 @@ For contributor guidelines and design principles, see [CONTRIBUTING.md](./CONTRI
 | `app-prepare-release.yml` | `prepare-release.yml` | `workflow_dispatch` | Generate timestamp tag, run git-cliff, open + auto-merge release PR |
 | `app-release.yml` | `release.yml` | `push` on the working branch + `paths: CHANGELOG.md` | Verify bot author, create tag + GitHub Release, force-push working→released branch |
 
-### Quality gates (docs, coverage, lint)
+### Quality gates (docs, coverage, lint, codequality)
 
 Each gate follows the same **measure + PR** pattern. The `*-measure.yml` reusable produces a baseline artifact on push to main; the `*-pr.yml` reusable re-measures the PR head via nested reusable, downloads the baseline via workflow-runs API, and posts a sticky PR comment comparing the two.
 
-| Central workflow | Consumer file | Trigger | Role |
-|---|---|---|---|
-| `ruby-gem-docs-measure.yml` | `docs-measure.yml` | `push main` | yardstick measure + verify (soft), upload `yardstick-report` baseline |
-| `ruby-gem-docs-pr.yml` | `docs-pr.yml` | `pull_request` | Measure PR head + compare with baseline, sticky comment, fail on threshold miss |
-| `ruby-gem-coverage-measure.yml` | `coverage-measure.yml` | `push main` | Run test task, upload `coverage` baseline |
-| `ruby-gem-coverage-pr.yml` | `coverage-pr.yml` | `pull_request` | Measure PR head + run undercover vs baseline, sticky comment, fail on regression |
-| `ruby-gem-rubocop-measure.yml` | `rubocop-measure.yml` | `push main` | Run rubocop `--format json`, upload `rubocop-report` baseline |
-| `ruby-gem-rubocop-pr.yml` | `rubocop-pr.yml` | `pull_request` | Measure PR head + diff offenses vs baseline, sticky comment, fail if any offense |
+Most gates are **strict** — the PR fails when findings are introduced. The codequality gate is **advisory** — reek / flog / flay are surfaced as deltas and trends, no fail.
+
+| Central workflow | Consumer file | Trigger | Mode | Role |
+|---|---|---|---|---|
+| `ruby-gem-docs-measure.yml` | `docs-measure.yml` | `push main` | strict | yardstick measure + verify (soft), upload `yardstick-report` baseline |
+| `ruby-gem-docs-pr.yml` | `docs-pr.yml` | `pull_request` | strict | Measure PR head + compare with baseline, sticky comment, fail on threshold miss |
+| `ruby-gem-coverage-measure.yml` | `coverage-measure.yml` | `push main` | strict | Run test task, upload `coverage` baseline |
+| `ruby-gem-coverage-pr.yml` | `coverage-pr.yml` | `pull_request` | strict | Measure PR head + run undercover vs baseline, sticky comment, fail on regression |
+| `ruby-gem-rubocop-measure.yml` | `rubocop-measure.yml` | `push main` | strict | Run rubocop `--format json`, upload `rubocop-report` baseline |
+| `ruby-gem-rubocop-pr.yml` | `rubocop-pr.yml` | `pull_request` | strict | Measure PR head + diff offenses vs baseline, sticky comment, fail if any offense |
+| `ruby-gem-codequality-measure.yml` | `codequality-measure.yml` | `push main` | advisory | Run reek + flog + flay, upload `codequality-report` baseline (`reek.json` + `flog.txt` + `flay.txt`) |
+| `ruby-gem-codequality-pr.yml` | `codequality-pr.yml` | `pull_request` | advisory | Measure PR head + diff vs baseline (reek smells + flog/flay scores), sticky comment, **never fails** |
 
 ### Docs deploy
 

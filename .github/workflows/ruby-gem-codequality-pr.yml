@@ -1,0 +1,123 @@
+name: Ruby Gem — Code Quality PR Check
+
+# Runs on pull requests. Delegates the PR-head measurement to
+# ruby-gem-codequality-measure.yml (same reusable used by main-push
+# baseline runs — zero duplication). Then fetches the latest baseline
+# from a main-push `codequality-measure.yml` run, posts a sticky PR
+# comment with the before/after diff (new reek smells via
+# (source, context, smell_type) tuple, flog and flay score deltas).
+#
+# **Advisory mode**: the workflow does NOT fail on findings. Reek /
+# flog / flay are intentionally treated as informational metrics —
+# devs see trends and decide what to fix. For a strict lint gate, use
+# ruby-gem-rubocop-pr.yml in addition.
+#
+# Same baseline pattern as ruby-gem-{docs,coverage,rubocop}-pr.yml.
+
+on:
+  workflow_call:
+    inputs:
+      ruby_version:
+        description: Ruby version for the runner.
+        required: false
+        type: string
+        default: '4.0'
+      paths:
+        description: Space-separated source paths to scan (forwarded to ruby-gem-codequality-measure.yml).
+        required: false
+        type: string
+        default: 'lib'
+      measure_workflow_file:
+        description: Consumer workflow filename that uploaded the `codequality-report` artifact on the base branch (used to find the baseline).
+        required: false
+        type: string
+        default: 'codequality-measure.yml'
+    secrets:
+      FLUENCE_CI_BOT_PRIVATE_KEY:
+        description: Optional GitHub App private key used to author the sticky PR comment. When omitted, the comment is posted as `github-actions[bot]` via the default `GITHUB_TOKEN`.
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    name: Measure
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-measure.yml@v1
+    with:
+      ruby_version: ${{ inputs.ruby_version }}
+      paths:        ${{ inputs.paths }}
+
+  comment:
+    name: Comment on PR
+    needs: measure
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download PR codequality report
+        uses: actions/download-artifact@v8
+        with:
+          name: codequality-report
+          path: codequality-pr/
+
+      - name: Find latest base-branch run with codequality report
+        id: base-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_FILE: ${{ inputs.measure_workflow_file }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # `status=success` is silently ignored by the runs endpoint
+          # (success is a conclusion, not a status). Query completed
+          # runs and filter by .conclusion in jq.
+          RUN_ID=$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/${WORKFLOW_FILE}/runs?branch=${BASE_REF}&status=completed&per_page=20" \
+            --jq '[.workflow_runs[] | select(.conclusion == "success")][0].id // ""')
+          echo "id=$RUN_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Download base codequality report
+        if: steps.base-run.outputs.id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: codequality-report
+          run-id: ${{ steps.base-run.outputs.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: codequality-base/
+
+      - name: Resolve baseline paths
+        id: base
+        run: |
+          if [ -f codequality-base/reek.json ]; then
+            echo "reek=codequality-base/reek.json" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -f codequality-base/flog.txt ]; then
+            echo "flog=codequality-base/flog.txt" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -f codequality-base/flay.txt ]; then
+            echo "flay=codequality-base/flay.txt" >> "$GITHUB_OUTPUT"
+          fi
+
+      - id: body
+        uses: fluence-eu/ci-workflows/actions/codequality-report@v1
+        with:
+          reek_path:      codequality-pr/reek.json
+          flog_path:      codequality-pr/flog.txt
+          flay_path:      codequality-pr/flay.txt
+          base_reek_path: ${{ steps.base.outputs.reek }}
+          base_flog_path: ${{ steps.base.outputs.flog }}
+          base_flay_path: ${{ steps.base.outputs.flay }}
+
+      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v1
+        with:
+          marker:          '<!-- codequality-report -->'
+          body:            ${{ steps.body.outputs.body }}
+          app-id:          ${{ vars.FLUENCE_CI_BOT_ID }}
+          app-private-key: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
