@@ -105,6 +105,11 @@ jobs:
             echo "flay=codequality-base/flay.txt" >> "$GITHUB_OUTPUT"
           fi
 
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ inputs.ruby_version }}
+          bundler-cache: true
+
       - id: body
         uses: fluence-eu/ci-workflows/actions/codequality-report@v1
         with:

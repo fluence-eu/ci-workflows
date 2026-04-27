@@ -85,9 +85,14 @@ def format_count_delta(diff)
 end
 
 def format_score_delta(diff)
-  return '`±0.0`' if diff.zero?
-
+  # Round first, *then* check for zero. `diff` is the result of a
+  # Float subtraction and IEEE-754 noise routinely yields tiny
+  # non-zero values (e.g. 1e-15) that round to 0.0 — checking
+  # `diff.zero?` before rounding would let those through and emit
+  # a misleading green/red delta like "+0.0".
   rounded = diff.round(1)
+  return '`±0.0`' if rounded.zero?
+
   rounded.positive? ? ":red_circle: `+#{rounded}`" : ":green_circle: `#{rounded}`"
 end
 
@@ -161,7 +166,15 @@ flay_base_cell  = base_flay ? base_flay.to_s : '—'
 flay_delta_cell = flay_delta ? format_count_delta(flay_delta.to_i) : '—'
 md << "| Flay total | #{flay_base_cell} | #{flay_pr_cell} | #{flay_delta_cell} |\n\n"
 
-status_line = if have_baseline && new_reek_smells.any?
+all_pr_missing = pr_reek.nil? && pr_flog.nil? && pr_flay.nil?
+
+# The all-missing case must be handled BEFORE baseline-driven branches
+# — otherwise a parse failure on the PR head with a successful baseline
+# would silently render ":white_check_mark: No new code-quality findings"
+# while the footer simultaneously warns that no tool output was captured.
+status_line = if all_pr_missing
+                ":warning: **No PR-side tool output captured** — verify reek, flog and flay are installed in the consumer's Gemfile."
+              elsif have_baseline && new_reek_smells.any?
                 ":mag: **#{new_reek_smells.size} new reek smell#{new_reek_smells.size == 1 ? '' : 's'}** introduced — review below."
               elsif have_baseline && ((flog_delta && flog_delta.positive?) || (flay_delta && flay_delta.positive?))
                 ':mag: Complexity / duplication score increased — review the deltas above.'
