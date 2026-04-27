@@ -1,0 +1,95 @@
+name: Rails — Security Measure
+
+# Runs brakeman + bundler-audit on a Rails app, captures their
+# outputs, uploads them as the `security-report` artifact, and
+# exposes both step outcomes as job outputs.
+#
+# Called from two places (mirrors ruby-gem-{docs,coverage,rubocop}-measure):
+# - the consumer's security-measure.yml on push to the working
+#   branch, to produce the baseline artifact used by
+#   rails-security-pr.yml,
+# - rails-security-pr.yml on pull_request, to measure the PR head
+#   (no duplication: same reusable, same behaviour).
+#
+# Both tools run with `continue-on-error: true` — a finding is
+# surfaced via the outcome output, not by aborting the upload. The
+# PR workflow consumes the outcomes to decide whether to fail the
+# run (after posting the sticky comment). The push-baseline
+# invocation does not gate on the outcomes — main may technically
+# carry pre-existing warnings without a CI failure, the diff on the
+# PR side is what catches regressions.
+
+on:
+  workflow_call:
+    inputs:
+      ruby_version:
+        description: Ruby version for the runner.
+        required: false
+        type: string
+        default: '4.0'
+    outputs:
+      brakeman_outcome:
+        description: Outcome of the brakeman step (`success` / `failure`).
+        value: ${{ jobs.measure.outputs.brakeman_outcome }}
+      audit_outcome:
+        description: Outcome of the bundler-audit step (`success` / `failure`).
+        value: ${{ jobs.measure.outputs.audit_outcome }}
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    name: Measure
+    runs-on: ubuntu-latest
+    outputs:
+      brakeman_outcome: ${{ steps.brakeman.outcome }}
+      audit_outcome: ${{ steps.audit.outcome }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ inputs.ruby_version }}
+          bundler-cache: true
+
+      - name: Cache brakeman analysis
+        uses: actions/cache@v5
+        with:
+          path: tmp/brakeman
+          # The cache must vary with anything that affects the binary
+          # parser output: Ruby runtime (inputs.ruby_version, the source
+          # of truth for setup-ruby), bundled brakeman version
+          # (Gemfile.lock), and brakeman's own config (`.brakeman.yml`,
+          # `config/brakeman.ignore` if present). hashFiles silently
+          # ignores missing files. restore-keys keeps the same
+          # Ruby-version prefix so a fallback never crosses runtimes.
+          key: brakeman-${{ runner.os }}-${{ inputs.ruby_version }}-${{ hashFiles('Gemfile.lock', '.brakeman.yml', 'config/brakeman.ignore') }}
+          restore-keys: brakeman-${{ runner.os }}-${{ inputs.ruby_version }}-
+
+      - name: Run brakeman (Rails static analysis)
+        id: brakeman
+        continue-on-error: true
+        run: bundle exec brakeman --no-pager --format json --output brakeman.json --cache-dir tmp/brakeman
+
+      - name: Run bundler-audit (gem CVE scan)
+        id: audit
+        continue-on-error: true
+        # `--update` refreshes the local CVE database before the
+        # check so a vulnerability disclosed since the previous run
+        # is still caught. `tee` keeps the human-readable output
+        # both in the logs and on disk for the report composite;
+        # `pipefail` preserves bundler-audit's exit code through
+        # the pipe so `continue-on-error` records the right outcome.
+        shell: bash
+        run: |
+          set -o pipefail
+          bundle exec bundler-audit check --update | tee audit.txt
+
+      - name: Upload security report
+        uses: actions/upload-artifact@v7
+        with:
+          name: security-report
+          path: |
+            brakeman.json
+            audit.txt
