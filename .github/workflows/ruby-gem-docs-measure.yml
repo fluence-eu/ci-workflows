@@ -52,11 +52,15 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .yardoc
-          # YARD's AST cache invalidates on source or yardstick config
-          # changes. On miss, the restore-key falls back to the latest
-          # cache; YARD then re-parses only the changed .rb files.
-          key: yard-${{ runner.os }}-${{ hashFiles('lib/**/*.rb', '.yardopts', '.yardstick.yml') }}
-          restore-keys: yard-${{ runner.os }}-
+          # The .yardoc blob ties to the YARD runtime — it's keyed on
+          # Ruby version (inputs.ruby_version, the source of truth for
+          # setup-ruby) and bundled YARD/yardstick versions (Gemfile.lock
+          # for apps, gemspec for gems) so a runtime bump can't restore
+          # an incompatible AST. Source/config files in hashFiles trigger
+          # incremental re-parses; the restore-key fallback keeps the
+          # same Ruby-version prefix.
+          key: yard-${{ runner.os }}-${{ inputs.ruby_version }}-${{ hashFiles('lib/**/*.rb', '.yardopts', '.yardstick.yml', 'Gemfile.lock', '*.gemspec') }}
+          restore-keys: yard-${{ runner.os }}-${{ inputs.ruby_version }}-
 
       - name: Run yardstick measurement
         run: bundle exec rake doc:measure

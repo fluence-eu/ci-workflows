@@ -50,12 +50,16 @@ jobs:
         uses: actions/cache@v5
         with:
           path: tmp/rubocop
-          # Hash on files that invalidate rubocop's parser cache:
-          # rubocop config, Ruby version, lockfile (apps) or gemspec (gems).
-          # hashFiles silently ignores missing files so the same key works
-          # for both project shapes.
-          key: rubocop-${{ runner.os }}-${{ hashFiles('.ruby-version', '**/.rubocop.yml', '**/.rubocop_todo.yml', 'Gemfile.lock', '*.gemspec') }}
-          restore-keys: rubocop-${{ runner.os }}-
+          # The cache must vary with anything that affects the binary
+          # parser output: Ruby runtime (inputs.ruby_version, the source
+          # of truth for setup-ruby — `.ruby-version` is unreliable as
+          # consumers may not commit it), bundled rubocop version
+          # (Gemfile.lock for apps, gemspec for gems — hashFiles silently
+          # ignores missing files), and rubocop config.
+          # restore-keys keeps the same Ruby-version prefix so a fallback
+          # never crosses runtimes.
+          key: rubocop-${{ runner.os }}-${{ inputs.ruby_version }}-${{ hashFiles('**/.rubocop.yml', '**/.rubocop_todo.yml', 'Gemfile.lock', '*.gemspec') }}
+          restore-keys: rubocop-${{ runner.os }}-${{ inputs.ruby_version }}-
 
       - name: Run rubocop
         id: rubocop
