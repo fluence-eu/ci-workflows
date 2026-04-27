@@ -93,6 +93,11 @@ jobs:
             echo "audit=security-base/audit.txt" >> "$GITHUB_OUTPUT"
           fi
 
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ inputs.ruby_version }}
+          bundler-cache: true
+
       - id: body
         uses: fluence-eu/ci-workflows/actions/security-report@v1
         with:
