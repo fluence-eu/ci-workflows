@@ -43,7 +43,7 @@ permissions:
 jobs:
   measure:
     name: Measure
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-measure.yml@v1
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-measure.yml@v2
     with:
       ruby_version: ${{ inputs.ruby_version }}
       paths:        ${{ inputs.paths }}
@@ -111,7 +111,7 @@ jobs:
           bundler-cache: true
 
       - id: body
-        uses: fluence-eu/ci-workflows/actions/codequality-report@v1
+        uses: fluence-eu/ci-workflows/actions/codequality-report@v2
         with:
           reek_path:      codequality-pr/reek.json
           flog_path:      codequality-pr/flog.txt
@@ -120,7 +120,7 @@ jobs:
           base_flog_path: ${{ steps.base.outputs.flog }}
           base_flay_path: ${{ steps.base.outputs.flay }}
 
-      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v1
+      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v2
         with:
           marker:          '<!-- codequality-report -->'
           body:            ${{ steps.body.outputs.body }}

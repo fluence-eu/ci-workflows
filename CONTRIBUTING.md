@@ -97,7 +97,7 @@ GitHub auto-generates nice step display names from each action's `action.yml` me
 
 ### 6. Helper scripts via composite actions
 
-Ruby helpers (`coverage_report.rb`, `yardstick_report.rb`, `rubocop_report.rb`) are wrapped as composite actions under `actions/{name}-report/`. Each composite action declares its inputs, calls the Ruby script via `${GITHUB_ACTION_PATH}`, and exposes the Markdown body as an output. The reusable PR workflows consume them via `uses: fluence-eu/ci-workflows/actions/{name}-report@v1` — no sidecar checkout, no dedicated GitHub App.
+Ruby helpers (`coverage_report.rb`, `yardstick_report.rb`, `rubocop_report.rb`) are wrapped as composite actions under `actions/{name}-report/`. Each composite action declares its inputs, calls the Ruby script via `${GITHUB_ACTION_PATH}`, and exposes the Markdown body as an output. The reusable PR workflows consume them via `uses: fluence-eu/ci-workflows/actions/{name}-report@v2` — no sidecar checkout, no dedicated GitHub App.
 
 When you add a helper:
 - Create `actions/<name>-report/` with an `action.yml` (declare inputs + `outputs.body.value`) and the Ruby script next to it

@@ -34,7 +34,7 @@ permissions:
 jobs:
   measure:
     name: Measure
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-rubocop-measure.yml@v1
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-rubocop-measure.yml@v2
     with:
       ruby_version: ${{ inputs.ruby_version }}
 
@@ -95,14 +95,14 @@ jobs:
           fi
 
       - id: body
-        uses: fluence-eu/ci-workflows/actions/rubocop-report@v1
+        uses: fluence-eu/ci-workflows/actions/rubocop-report@v2
         with:
           outcome:   ${{ needs.measure.outputs.rubocop_outcome }}
           base_ref:  origin/${{ github.base_ref }}
           pr_path:   rubocop-pr/rubocop.json
           base_path: ${{ steps.base.outputs.path }}
 
-      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v1
+      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v2
         with:
           marker:          '<!-- rubocop-report -->'
           body:            ${{ steps.body.outputs.body }}

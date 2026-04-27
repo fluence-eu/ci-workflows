@@ -35,7 +35,7 @@ permissions:
 jobs:
   measure:
     name: Measure
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-measure.yml@v1
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-measure.yml@v2
     with:
       ruby_version: ${{ inputs.ruby_version }}
 
@@ -96,14 +96,14 @@ jobs:
           fi
 
       - id: body
-        uses: fluence-eu/ci-workflows/actions/yardstick-report@v1
+        uses: fluence-eu/ci-workflows/actions/yardstick-report@v2
         with:
           outcome:   ${{ needs.measure.outputs.verify_outcome }}
           base_ref:  origin/${{ github.base_ref }}
           pr_path:   yardstick-pr/yardstick_report.txt
           base_path: ${{ steps.base.outputs.path }}
 
-      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v1
+      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v2
         with:
           marker:          '<!-- yardstick-report -->'
           body:            ${{ steps.body.outputs.body }}

@@ -35,7 +35,7 @@ permissions:
 jobs:
   measure:
     name: Measure
-    uses: fluence-eu/ci-workflows/.github/workflows/rails-security-measure.yml@v1
+    uses: fluence-eu/ci-workflows/.github/workflows/rails-security-measure.yml@v2
     with:
       ruby_version: ${{ inputs.ruby_version }}
 
@@ -99,7 +99,7 @@ jobs:
           bundler-cache: true
 
       - id: body
-        uses: fluence-eu/ci-workflows/actions/security-report@v1
+        uses: fluence-eu/ci-workflows/actions/security-report@v2
         with:
           brakeman_outcome:   ${{ needs.measure.outputs.brakeman_outcome }}
           audit_outcome:      ${{ needs.measure.outputs.audit_outcome }}
@@ -108,7 +108,7 @@ jobs:
           base_brakeman_path: ${{ steps.base.outputs.brakeman }}
           base_audit_path:    ${{ steps.base.outputs.audit }}
 
-      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v1
+      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v2
         with:
           marker:          '<!-- security-report -->'
           body:            ${{ steps.body.outputs.body }}
