@@ -26,9 +26,9 @@ For contributor guidelines and design principles, see [CONTRIBUTING.md](./CONTRI
 | `app-prepare-release.yml` | `prepare-release.yml` | `workflow_dispatch` | Generate timestamp tag, run git-cliff, open + auto-merge release PR |
 | `app-release.yml` | `release.yml` | `push` on the working branch + `paths: CHANGELOG.md` | Verify bot author, create tag + GitHub Release, force-push working→released branch |
 
-### Quality gates (docs, coverage, lint)
+### Quality gates (docs, coverage, lint, security)
 
-Each gate follows the same **measure + PR** pattern. The `*-measure.yml` reusable produces a baseline artifact on push to main; the `*-pr.yml` reusable re-measures the PR head via nested reusable, downloads the baseline via workflow-runs API, and posts a sticky PR comment comparing the two.
+Each gate follows the same **measure + PR** pattern. The `*-measure.yml` reusable produces a baseline artifact on push to the working branch; the `*-pr.yml` reusable re-measures the PR head via nested reusable, downloads the baseline via workflow-runs API, and posts a sticky PR comment comparing the two.
 
 | Central workflow | Consumer file | Trigger | Role |
 |---|---|---|---|
@@ -38,20 +38,14 @@ Each gate follows the same **measure + PR** pattern. The `*-measure.yml` reusabl
 | `ruby-gem-coverage-pr.yml` | `coverage-pr.yml` | `pull_request` | Measure PR head + run undercover vs baseline, sticky comment, fail on regression |
 | `ruby-gem-rubocop-measure.yml` | `rubocop-measure.yml` | `push main` | Run rubocop `--format json`, upload `rubocop-report` baseline |
 | `ruby-gem-rubocop-pr.yml` | `rubocop-pr.yml` | `pull_request` | Measure PR head + diff offenses vs baseline, sticky comment, fail if any offense |
+| `rails-security-measure.yml` | `security-measure.yml` | `push` working branch | Run brakeman + bundler-audit, upload `security-report` baseline (`brakeman.json` + `audit.txt`) |
+| `rails-security-pr.yml` | `security-pr.yml` | `pull_request` | Measure PR head + diff vs baseline (brakeman fingerprints + CVE IDs), sticky comment, fail on findings |
 
 ### Docs deploy
 
 | Central workflow | Consumer file | Trigger | Role |
 |---|---|---|---|
 | `ruby-gem-docs-deploy.yml` | `docs-deploy.yml` | `push main` + optional `workflow_dispatch` | Build YARD site, deploy to GitHub Pages |
-
-### Security (Rails apps)
-
-Single-purpose workflow that runs both brakeman and bundler-audit. No measure/baseline — security scans are stateless: clean or flagged. Both tools run with `continue-on-error` so a brakeman failure doesn't hide bundler-audit findings (and vice versa).
-
-| Central workflow | Consumer file | Trigger | Role |
-|---|---|---|---|
-| `rails-security.yml` | `security.yml` (typically) | `pull_request` (+ optionally `push` on the working branch) | Run brakeman + bundler-audit, fail if either flags findings |
 
 ---
 
