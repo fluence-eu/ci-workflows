@@ -1,0 +1,60 @@
+name: Code Quality Report
+description: Render a sticky-comment Markdown body summarising reek, flog and flay findings — advisory mode, no fail.
+
+inputs:
+  reek_path:
+    description: Path to reek's JSON report (PR head).
+    required: false
+    default: 'reek.json'
+  flog_path:
+    description: Path to flog's text output (PR head).
+    required: false
+    default: 'flog.txt'
+  flay_path:
+    description: Path to flay's text output (PR head).
+    required: false
+    default: 'flay.txt'
+  base_reek_path:
+    description: Path to the baseline reek JSON report. Empty when no baseline is available.
+    required: false
+    default: ''
+  base_flog_path:
+    description: Path to the baseline flog text output. Empty when no baseline is available.
+    required: false
+    default: ''
+  base_flay_path:
+    description: Path to the baseline flay text output. Empty when no baseline is available.
+    required: false
+    default: ''
+
+outputs:
+  body:
+    description: Markdown body (with sticky-comment marker) ready to post via `gh api`.
+    value: ${{ steps.render.outputs.body }}
+
+runs:
+  using: composite
+  steps:
+    - id: render
+      shell: bash
+      env:
+        REEK_PATH: ${{ inputs.reek_path }}
+        FLOG_PATH: ${{ inputs.flog_path }}
+        FLAY_PATH: ${{ inputs.flay_path }}
+        BASE_REEK_PATH: ${{ inputs.base_reek_path }}
+        BASE_FLOG_PATH: ${{ inputs.base_flog_path }}
+        BASE_FLAY_PATH: ${{ inputs.base_flay_path }}
+      run: |
+        BODY="$(ruby "${GITHUB_ACTION_PATH}/codequality_report.rb" \
+          "$REEK_PATH" \
+          "$FLOG_PATH" \
+          "$FLAY_PATH" \
+          "$BASE_REEK_PATH" \
+          "$BASE_FLOG_PATH" \
+          "$BASE_FLAY_PATH")"
+        {
+          echo "body<<EOF"
+          echo "<!-- codequality-report -->"
+          echo "$BODY"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"

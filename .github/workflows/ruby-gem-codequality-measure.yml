@@ -1,0 +1,86 @@
+name: Ruby Gem — Code Quality Measure
+
+# Runs reek + flog + flay against the consumer's source paths,
+# captures their outputs, and uploads the lot as the
+# `codequality-report` artifact.
+#
+# Advisory only — none of the tools fail the workflow on findings;
+# the PR-side workflow (ruby-gem-codequality-pr.yml) surfaces
+# deltas and trends without blocking. Use this alongside
+# ruby-gem-rubocop-* if you want strict lint gating; the two
+# scopes are intentionally separate (style/correctness vs design
+# smell / complexity / duplication).
+#
+# Called from two places (mirrors ruby-gem-{docs,coverage,rubocop}-measure):
+# - the consumer's codequality-measure.yml on push to main, to
+#   produce the baseline artifact used by ruby-gem-codequality-pr.yml,
+# - ruby-gem-codequality-pr.yml on pull_request, to measure the PR
+#   head (no duplication: same reusable, same behaviour).
+
+on:
+  workflow_call:
+    inputs:
+      ruby_version:
+        description: Ruby version for the runner.
+        required: false
+        type: string
+        default: '4.0'
+      paths:
+        description: Space-separated source paths to scan (e.g. `lib` for gems, `app lib` for Rails apps). Reek also honours a project-local `.reek.yml` config.
+        required: false
+        type: string
+        default: 'lib'
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    name: Measure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ inputs.ruby_version }}
+          bundler-cache: true
+
+      - name: Run reek (code smells)
+        continue-on-error: true
+        env:
+          PATHS: ${{ inputs.paths }}
+        # Reek exits non-zero on findings, but `continue-on-error`
+        # keeps the workflow alive so flog and flay still run.
+        run: bundle exec reek --format json --output reek.json $PATHS
+
+      - name: Run flog (complexity)
+        continue-on-error: true
+        env:
+          PATHS: ${{ inputs.paths }}
+        # `tee` keeps the human-readable view in the workflow logs
+        # while persisting it for the codequality-report composite.
+        # Flog itself never exits non-zero, so the outcome is mostly
+        # cosmetic.
+        shell: bash
+        run: |
+          set -o pipefail
+          bundle exec flog $PATHS | tee flog.txt
+
+      - name: Run flay (duplication)
+        continue-on-error: true
+        env:
+          PATHS: ${{ inputs.paths }}
+        shell: bash
+        run: |
+          set -o pipefail
+          bundle exec flay $PATHS | tee flay.txt
+
+      - name: Upload codequality report
+        uses: actions/upload-artifact@v7
+        with:
+          name: codequality-report
+          path: |
+            reek.json
+            flog.txt
+            flay.txt
