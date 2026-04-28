@@ -161,6 +161,7 @@ jobs:
       RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
     permissions:
       contents: read
+      packages: read
 ```
 
 ```yaml
@@ -180,8 +181,14 @@ jobs:
     uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-release.yml@v2
     with:
       gem_name: my-gem-name
+    secrets:
+      # Forwarded so `gh release create` runs with the App's installation
+      # token. App-issued release events trigger downstream `publish.yml` —
+      # `secrets.GITHUB_TOKEN` does not (GitHub anti-loop rule).
+      RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
     permissions:
       contents: write
+      packages: read
 ```
 
 ```yaml
@@ -224,6 +231,7 @@ jobs:
       RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
     permissions:
       contents: read
+      packages: read
 ```
 
 ```yaml
@@ -245,6 +253,7 @@ jobs:
       RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
     permissions:
       contents: write
+      packages: read
 ```
 
 Optional inputs if your repo uses different branch names:
@@ -287,6 +296,7 @@ jobs:
     uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-measure.yml@v2
     permissions:
       contents: read
+      packages: read
 ```
 
 ```yaml
@@ -297,10 +307,14 @@ on:
 jobs:
   docs:
     uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-pr.yml@v2
+    secrets:
+      FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
+      RELEASE_APP_PRIVATE_KEY:    ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
     permissions:
       contents: read
       pull-requests: write
       actions: read
+      packages: read
 ```
 
 ### Coverage
@@ -318,6 +332,7 @@ jobs:
     #   rake_task: 'test'                   # default 'spec' — override for minitest projects
     permissions:
       contents: read
+      packages: read
 ```
 
 ```yaml
@@ -331,10 +346,14 @@ jobs:
     # with:
     #   rake_task:     'test'
     #   exclude_files: 'lib/my/gem/version.rb'  # undercover --exclude-files glob
+    secrets:
+      FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
+      RELEASE_APP_PRIVATE_KEY:    ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
     permissions:
       contents: read
       pull-requests: write
       actions: read
+      packages: read
 ```
 
 ### RuboCop
@@ -350,6 +369,7 @@ jobs:
     uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-rubocop-measure.yml@v2
     permissions:
       contents: read
+      packages: read
 ```
 
 ```yaml
@@ -360,10 +380,86 @@ on:
 jobs:
   rubocop:
     uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-rubocop-pr.yml@v2
+    secrets:
+      FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
+      RELEASE_APP_PRIVATE_KEY:    ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
     permissions:
       contents: read
       pull-requests: write
       actions: read
+      packages: read
+```
+
+### Code Quality
+
+```yaml
+# .github/workflows/codequality-measure.yml
+name: Code Quality Measure (baseline)
+on:
+  push:
+    branches: [main]
+jobs:
+  measure:
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-measure.yml@v2
+    with:
+      paths: 'app lib'                       # default 'lib'
+    permissions:
+      contents: read
+      packages: read
+```
+
+```yaml
+# .github/workflows/codequality-pr.yml
+name: Code Quality PR Check
+on:
+  pull_request:
+jobs:
+  codequality:
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-pr.yml@v2
+    with:
+      paths: 'app lib'
+    secrets:
+      FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
+      RELEASE_APP_PRIVATE_KEY:    ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+      packages: read
+```
+
+### Security (Rails)
+
+```yaml
+# .github/workflows/security-measure.yml
+name: Security Measure (baseline)
+on:
+  push:
+    branches: [main]
+jobs:
+  measure:
+    uses: fluence-eu/ci-workflows/.github/workflows/rails-security-measure.yml@v2
+    permissions:
+      contents: read
+      packages: read
+```
+
+```yaml
+# .github/workflows/security-pr.yml
+name: Security PR Check
+on:
+  pull_request:
+jobs:
+  security:
+    uses: fluence-eu/ci-workflows/.github/workflows/rails-security-pr.yml@v2
+    secrets:
+      FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
+      RELEASE_APP_PRIVATE_KEY:    ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+      packages: read
 ```
 
 ---
