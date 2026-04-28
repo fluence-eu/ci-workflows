@@ -23,15 +23,12 @@
 require 'json'
 require 'set'
 
-brakeman_outcome     = ARGV[0] || 'success'
-audit_outcome        = ARGV[1] || 'success'
-ruby_audit_outcome   = ARGV[2] || 'success'
-brakeman_path        = ARGV[3] || 'brakeman.json'
-audit_path           = ARGV[4] || 'audit.txt'
-ruby_audit_path      = ARGV[5] || 'ruby_audit.txt'
-base_brakeman_path   = ARGV[6]
-base_audit_path      = ARGV[7]
-base_ruby_audit_path = ARGV[8]
+brakeman_path        = ARGV[0] || 'brakeman.json'
+audit_path           = ARGV[1] || 'audit.txt'
+ruby_audit_path      = ARGV[2] || 'ruby_audit.txt'
+base_brakeman_path   = ARGV[3]
+base_audit_path      = ARGV[4]
+base_ruby_audit_path = ARGV[5]
 
 # Empty strings (the GitHub Actions default for unset string inputs)
 # are treated the same as nil — "no baseline".
@@ -134,9 +131,14 @@ base_brakeman_count = base_brakeman&.dig(:count) || 0
 audit_count         = pr_advisories.size
 base_audit_count    = base_advisories.size
 
-brakeman_failed   = brakeman_outcome == 'failure'
-audit_failed      = audit_outcome == 'failure'
-ruby_audit_failed = ruby_audit_outcome == 'failure'
+# Derive per-tool ✓/✗ from the captured outputs themselves (the
+# composite no longer takes outcome inputs from the workflow).
+# Brakeman: any warning in the parsed JSON. Bundler-audit: any
+# advisory line in the text dump. Ruby-audit: anything other than
+# the canonical "No vulnerabilities found" sentinel.
+brakeman_failed   = !pr_brakeman.nil? && pr_brakeman[:count].positive?
+audit_failed      = pr_advisories.any?
+ruby_audit_failed = !pr_ruby_audit_text.empty? && !pr_ruby_audit_text.match?(/No vulnerabilities found/i)
 any_failure       = brakeman_failed || audit_failed || ruby_audit_failed
 
 md = +''

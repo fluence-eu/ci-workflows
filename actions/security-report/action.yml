@@ -2,15 +2,6 @@ name: Security Report
 description: Render a sticky-comment Markdown body summarising brakeman, bundler-audit and ruby-audit findings.
 
 inputs:
-  brakeman_outcome:
-    description: Outcome of the brakeman step (`success` or `failure`).
-    required: true
-  audit_outcome:
-    description: Outcome of the bundler-audit step (`success` or `failure`).
-    required: true
-  ruby_audit_outcome:
-    description: Outcome of the ruby-audit step (`success` or `failure`).
-    required: true
   brakeman_path:
     description: Path to brakeman's JSON report (PR head).
     required: false
@@ -49,9 +40,6 @@ runs:
       env:
         # Blob-link anchor for per-warning rows.
         GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
-        BRAKEMAN_OUTCOME: ${{ inputs.brakeman_outcome }}
-        AUDIT_OUTCOME: ${{ inputs.audit_outcome }}
-        RUBY_AUDIT_OUTCOME: ${{ inputs.ruby_audit_outcome }}
         BRAKEMAN_PATH: ${{ inputs.brakeman_path }}
         AUDIT_PATH: ${{ inputs.audit_path }}
         RUBY_AUDIT_PATH: ${{ inputs.ruby_audit_path }}
@@ -60,9 +48,6 @@ runs:
         BASE_RUBY_AUDIT_PATH: ${{ inputs.base_ruby_audit_path }}
       run: |
         BODY="$(ruby "${GITHUB_ACTION_PATH}/security_report.rb" \
-          "$BRAKEMAN_OUTCOME" \
-          "$AUDIT_OUTCOME" \
-          "$RUBY_AUDIT_OUTCOME" \
           "$BRAKEMAN_PATH" \
           "$AUDIT_PATH" \
           "$RUBY_AUDIT_PATH" \
