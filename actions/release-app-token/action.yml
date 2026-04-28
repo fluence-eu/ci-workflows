@@ -1,0 +1,38 @@
+name: Release App Token
+description: |
+  Generate a GitHub App installation token from the Fluence release App.
+  Centralises the create-github-app-token@v3 invocation that the
+  release/prepare-release workflows duplicate. App ID is read from
+  `vars.RELEASE_APP_ID` (org/repo variable) so the only thing the
+  caller has to forward is the private key (which can't be read by a
+  composite since secrets aren't accessible in composite scope).
+
+  When `private-key` is empty (e.g. a consumer that hasn't opted in
+  yet), the token-generation step is skipped and `outputs.token`
+  resolves to an empty string. Callers can then fall back to
+  `github.token` via:
+      ${{ steps.app-token.outputs.token || github.token }}
+
+inputs:
+  private-key:
+    description: GitHub App private key (PEM). Pass via `secrets.RELEASE_APP_PRIVATE_KEY`. When empty the action no-ops and outputs.token is empty.
+    required: false
+    default: ''
+
+outputs:
+  token:
+    description: Installation token, or empty string if no private key was provided.
+    value: ${{ steps.token.outputs.token }}
+  app-slug:
+    description: Slug of the App that issued the token (e.g. `fluence-release-bot`), or empty string when no token was generated.
+    value: ${{ steps.token.outputs.app-slug }}
+
+runs:
+  using: composite
+  steps:
+    - id: token
+      if: inputs.private-key != ''
+      uses: actions/create-github-app-token@v3
+      with:
+        app-id: ${{ vars.RELEASE_APP_ID }}
+        private-key: ${{ inputs.private-key }}

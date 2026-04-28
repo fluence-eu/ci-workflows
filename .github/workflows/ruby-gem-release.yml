@@ -12,6 +12,17 @@ on:
         required: false
         type: string
         default: '4.0'
+    secrets:
+      RELEASE_APP_PRIVATE_KEY:
+        description: |
+          Private key of the release GitHub App. When provided, the
+          GitHub Release is created with the App's installation token
+          so the `release: published` event triggers downstream
+          workflows (e.g. `publish.yml` pushing the gem to GitHub
+          Packages). When omitted, falls back to GITHUB_TOKEN — the
+          Release is created but `publish.yml` won't auto-trigger
+          (GitHub blocks downstream events from GITHUB_TOKEN actions).
+        required: false
 
 jobs:
   release:
@@ -29,6 +40,11 @@ jobs:
         with:
           ruby-version: ${{ inputs.ruby_version }}
           bundler-cache: true
+
+      - id: app-token
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v2
+        with:
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
       - name: Get version from gemspec
         id: version
@@ -76,7 +92,11 @@ jobs:
       - name: Create GitHub Release
         if: steps.check.outputs.exists == 'false'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # App token (when forwarded) emits release events that trigger
+          # downstream `publish.yml`. Falls back to GITHUB_TOKEN when no
+          # App key was passed — Release still gets created, just no
+          # auto-publish.
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
         run: |
           gh release create ${{ steps.version.outputs.tag }} \
             --title "${{ steps.version.outputs.tag }}" \
@@ -89,5 +109,5 @@ jobs:
       - name: Attach gem to release
         if: steps.check.outputs.exists == 'false'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
         run: gh release upload ${{ steps.version.outputs.tag }} ${{ inputs.gem_name }}-*.gem --clobber
