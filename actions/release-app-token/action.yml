@@ -4,11 +4,11 @@ description: |
   Centralises the create-github-app-token@v3 invocation that the
   release/prepare-release workflows duplicate.
 
-  Both `app-id` and `private-key` must be passed in by the caller —
+  Both `client-id` and `private-key` must be passed in by the caller —
   per the GitHub Actions context-availability rules, neither `vars`
   nor `secrets` are accessible inside a composite action. Callers
   forward them via the `with:` block:
-    app-id      -> vars.RELEASE_APP_ID
+    client-id   -> vars.RELEASE_CLIENT_ID
     private-key -> secrets.RELEASE_APP_PRIVATE_KEY
 
   When `private-key` is empty (e.g. a consumer that hasn't opted in
@@ -17,8 +17,8 @@ description: |
   the GitHub Actions short-circuit operator on the output.
 
 inputs:
-  app-id:
-    description: GitHub App ID. Pass via `vars.RELEASE_APP_ID` from the calling workflow.
+  client-id:
+    description: GitHub App Client ID. Pass via `vars.RELEASE_CLIENT_ID` from the calling workflow.
     required: true
   private-key:
     description: GitHub App private key (PEM). Pass via `secrets.RELEASE_APP_PRIVATE_KEY`. When empty the action no-ops and outputs are empty.
@@ -40,5 +40,5 @@ runs:
       if: inputs.private-key != ''
       uses: actions/create-github-app-token@v3
       with:
-        app-id: ${{ inputs.app-id }}
+        client-id: ${{ inputs.client-id }}
         private-key: ${{ inputs.private-key }}
