@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-# Build a Markdown summary of brakeman + bundler-audit findings for
-# the sticky PR comment. Mirrors the visual language of the other
-# *_report.rb scripts: header with delta vs baseline, status line,
-# per-tool status table, prominent "new findings" sections and
+# Build a Markdown summary of brakeman + bundler-audit + ruby-audit
+# findings for the sticky PR comment. Mirrors the visual language of
+# the other *_report.rb scripts: header with delta vs baseline, status
+# line, per-tool status table, prominent "new findings" sections and
 # collapsed "all findings" sections.
 #
 # Diff strategy:
@@ -12,6 +12,9 @@
 #   but not on PR.
 # - Bundler-audit: compare advisory IDs (CVE-XXXX-NNNN) extracted via
 #   regex from the text output. Same set-difference logic.
+# - Ruby-audit: outcome-based only (the tool exposes no machine-readable
+#   format). No diff; we surface PR-side ✅/❌ and dump the full text
+#   in a <details> when it fails.
 #
 # When no baseline is provided (first run, missing artifact), falls
 # back to a current-state-only view, matching the prior single-mode
@@ -20,17 +23,21 @@
 require 'json'
 require 'set'
 
-brakeman_outcome   = ARGV[0] || 'success'
-audit_outcome      = ARGV[1] || 'success'
-brakeman_path      = ARGV[2] || 'brakeman.json'
-audit_path         = ARGV[3] || 'audit.txt'
-base_brakeman_path = ARGV[4]
-base_audit_path    = ARGV[5]
+brakeman_outcome     = ARGV[0] || 'success'
+audit_outcome        = ARGV[1] || 'success'
+ruby_audit_outcome   = ARGV[2] || 'success'
+brakeman_path        = ARGV[3] || 'brakeman.json'
+audit_path           = ARGV[4] || 'audit.txt'
+ruby_audit_path      = ARGV[5] || 'ruby_audit.txt'
+base_brakeman_path   = ARGV[6]
+base_audit_path      = ARGV[7]
+base_ruby_audit_path = ARGV[8]
 
 # Empty strings (the GitHub Actions default for unset string inputs)
 # are treated the same as nil — "no baseline".
-base_brakeman_path = nil if base_brakeman_path.nil? || base_brakeman_path.empty?
-base_audit_path    = nil if base_audit_path.nil? || base_audit_path.empty?
+base_brakeman_path   = nil if base_brakeman_path.nil? || base_brakeman_path.empty?
+base_audit_path      = nil if base_audit_path.nil? || base_audit_path.empty?
+base_ruby_audit_path = nil if base_ruby_audit_path.nil? || base_ruby_audit_path.empty?
 
 # Parse a brakeman --format json report. Returns nil if the file is
 # missing or malformed so the markdown gracefully degrades.
@@ -100,12 +107,14 @@ end
 repo = ENV.fetch('GITHUB_REPOSITORY', nil)
 sha  = ENV.fetch('GITHUB_SHA', nil)
 
-pr_brakeman     = parse_brakeman(brakeman_path)
-pr_audit_text   = read_audit(audit_path)
-base_brakeman   = parse_brakeman(base_brakeman_path)
-base_audit_text = read_audit(base_audit_path)
+pr_brakeman          = parse_brakeman(brakeman_path)
+pr_audit_text        = read_audit(audit_path)
+pr_ruby_audit_text   = read_audit(ruby_audit_path)
+base_brakeman        = parse_brakeman(base_brakeman_path)
+base_audit_text      = read_audit(base_audit_path)
+base_ruby_audit_text = read_audit(base_ruby_audit_path)
 
-have_baseline = !base_brakeman.nil? || !base_audit_text.empty?
+have_baseline = !base_brakeman.nil? || !base_audit_text.empty? || !base_ruby_audit_text.empty?
 
 # Brakeman diff via fingerprints.
 pr_brakeman_fps   = pr_brakeman&.dig(:fingerprints) || Set.new
@@ -125,9 +134,10 @@ base_brakeman_count = base_brakeman&.dig(:count) || 0
 audit_count         = pr_advisories.size
 base_audit_count    = base_advisories.size
 
-brakeman_failed = brakeman_outcome == 'failure'
-audit_failed    = audit_outcome == 'failure'
-any_failure     = brakeman_failed || audit_failed
+brakeman_failed   = brakeman_outcome == 'failure'
+audit_failed      = audit_outcome == 'failure'
+ruby_audit_failed = ruby_audit_outcome == 'failure'
+any_failure       = brakeman_failed || audit_failed || ruby_audit_failed
 
 md = +''
 
@@ -138,6 +148,7 @@ if any_failure
   parts = []
   parts << "#{brakeman_count} brakeman warning#{brakeman_count == 1 ? '' : 's'}" if brakeman_failed
   parts << "#{audit_count} CVE#{audit_count == 1 ? '' : 's'}" if audit_failed
+  parts << 'ruby-audit findings' if ruby_audit_failed
   title_suffix << " — #{parts.join(', ')}"
 end
 md << "## #{icon} Security Scan#{title_suffix}\n\n"
@@ -147,12 +158,17 @@ if have_baseline
   md << "| Tool | Base | PR | Δ |\n"
   md << "|---|---:|---:|---:|\n"
   md << "| Brakeman | #{base_brakeman_count} | #{brakeman_count} | #{format_count_delta(brakeman_count - base_brakeman_count)} |\n"
-  md << "| Bundler-audit | #{base_audit_count} | #{audit_count} | #{format_count_delta(audit_count - base_audit_count)} |\n\n"
+  md << "| Bundler-audit | #{base_audit_count} | #{audit_count} | #{format_count_delta(audit_count - base_audit_count)} |\n"
+  # Ruby-audit has no machine-readable format, so we can't show counts
+  # or a delta. Surface PR-side outcome only with em-dashes elsewhere.
+  ruby_pr_cell = ruby_audit_failed ? ':x: vulnerabilities found' : ':white_check_mark: clean'
+  md << "| Ruby-audit | — | #{ruby_pr_cell} | — |\n\n"
 else
   md << "| Tool | Result |\n"
   md << "|---|---|\n"
   md << "| Brakeman | #{brakeman_failed ? ":x: #{brakeman_count} warning#{brakeman_count == 1 ? '' : 's'}" : ':white_check_mark: clean'} |\n"
-  md << "| Bundler-audit | #{audit_failed ? ':x: vulnerabilities found' : ':white_check_mark: clean'} |\n\n"
+  md << "| Bundler-audit | #{audit_failed ? ':x: vulnerabilities found' : ':white_check_mark: clean'} |\n"
+  md << "| Ruby-audit | #{ruby_audit_failed ? ':x: vulnerabilities found' : ':white_check_mark: clean'} |\n\n"
 end
 
 # Status line — distinguish "new in this PR" from "pre-existing" when possible.
@@ -221,13 +237,21 @@ if audit_failed && !pr_audit_text.empty?
   md << "</details>\n\n"
 end
 
+# Full ruby-audit text dump. ruby-audit has no machine-readable format,
+# so we just surface its full output verbatim when it flags anything.
+if ruby_audit_failed && !pr_ruby_audit_text.empty?
+  md << "<details><summary>:mag: Ruby-audit findings (full output)</summary>\n\n"
+  md << "```\n#{pr_ruby_audit_text.strip}\n```\n\n"
+  md << "</details>\n\n"
+end
+
 unless have_baseline
   md << "_No baseline report available — comparison with the base branch is skipped._\n"
 end
 
-# Soft warning when neither tool produced any output.
-if !any_failure && pr_brakeman.nil? && pr_audit_text.empty?
-  md << "_No tool output captured — verify brakeman and bundler-audit are installed in the consumer's Gemfile._\n"
+# Soft warning when no tool produced any output.
+if !any_failure && pr_brakeman.nil? && pr_audit_text.empty? && pr_ruby_audit_text.empty?
+  md << "_No tool output captured — verify brakeman, bundler-audit and ruby_audit are installed in the consumer's Gemfile._\n"
 end
 
 print md

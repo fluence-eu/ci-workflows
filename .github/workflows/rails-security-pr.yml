@@ -83,6 +83,9 @@ jobs:
           if [ -f security-base/audit.txt ]; then
             echo "audit=security-base/audit.txt" >> "$GITHUB_OUTPUT"
           fi
+          if [ -f security-base/ruby_audit.txt ]; then
+            echo "ruby_audit=security-base/ruby_audit.txt" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: ruby/setup-ruby@v1
         with:
@@ -92,12 +95,15 @@ jobs:
       - id: body
         uses: fluence-eu/ci-workflows/actions/security-report@v2
         with:
-          brakeman_outcome:   ${{ needs.measure.outputs.brakeman_outcome }}
-          audit_outcome:      ${{ needs.measure.outputs.audit_outcome }}
-          brakeman_path:      security-pr/brakeman.json
-          audit_path:         security-pr/audit.txt
-          base_brakeman_path: ${{ steps.base.outputs.brakeman }}
-          base_audit_path:    ${{ steps.base.outputs.audit }}
+          brakeman_outcome:     ${{ needs.measure.outputs.brakeman_outcome }}
+          audit_outcome:        ${{ needs.measure.outputs.audit_outcome }}
+          ruby_audit_outcome:   ${{ needs.measure.outputs.ruby_audit_outcome }}
+          brakeman_path:        security-pr/brakeman.json
+          audit_path:           security-pr/audit.txt
+          ruby_audit_path:      security-pr/ruby_audit.txt
+          base_brakeman_path:   ${{ steps.base.outputs.brakeman }}
+          base_audit_path:      ${{ steps.base.outputs.audit }}
+          base_ruby_audit_path: ${{ steps.base.outputs.ruby_audit }}
 
       - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v2
         with:
@@ -106,8 +112,8 @@ jobs:
           app-id:          ${{ vars.FLUENCE_CI_BOT_ID }}
           app-private-key: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
 
-      - name: Fail if either scan flagged findings
-        if: needs.measure.outputs.brakeman_outcome == 'failure' || needs.measure.outputs.audit_outcome == 'failure'
+      - name: Fail if any scan flagged findings
+        if: needs.measure.outputs.brakeman_outcome == 'failure' || needs.measure.outputs.audit_outcome == 'failure' || needs.measure.outputs.ruby_audit_outcome == 'failure'
         run: |
-          echo "::error::Security scan failed (brakeman: ${{ needs.measure.outputs.brakeman_outcome }}, bundler-audit: ${{ needs.measure.outputs.audit_outcome }})"
+          echo "::error::Security scan failed (brakeman: ${{ needs.measure.outputs.brakeman_outcome }}, bundler-audit: ${{ needs.measure.outputs.audit_outcome }}, ruby-audit: ${{ needs.measure.outputs.ruby_audit_outcome }})"
           exit 1

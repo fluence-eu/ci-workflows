@@ -40,8 +40,8 @@ Most gates are **strict** — the PR fails when findings are introduced. The cod
 | `ruby-gem-coverage-pr.yml` | `coverage-pr.yml` | `pull_request` | strict | Measure PR head + run undercover vs baseline, sticky comment, fail on regression |
 | `ruby-gem-rubocop-measure.yml` | `rubocop-measure.yml` | `push main` | strict | Run rubocop `--format json`, upload `rubocop-report` baseline |
 | `ruby-gem-rubocop-pr.yml` | `rubocop-pr.yml` | `pull_request` | strict | Measure PR head + diff offenses vs baseline, sticky comment, fail if any offense |
-| `rails-security-measure.yml` | `security-measure.yml` | `push` working branch | strict | Run brakeman + bundler-audit, upload `security-report` baseline (`brakeman.json` + `audit.txt`) |
-| `rails-security-pr.yml` | `security-pr.yml` | `pull_request` | strict | Measure PR head + diff vs baseline (brakeman fingerprints + CVE IDs), sticky comment, fail on findings |
+| `rails-security-measure.yml` | `security-measure.yml` | `push` working branch | strict | Run brakeman + bundler-audit + ruby-audit, upload `security-report` baseline (`brakeman.json` + `audit.txt` + `ruby_audit.txt`) |
+| `rails-security-pr.yml` | `security-pr.yml` | `pull_request` | strict | Measure PR head + diff vs baseline (brakeman fingerprints + CVE IDs; ruby-audit outcome-only, no diff), sticky comment, fail on findings |
 | `ruby-gem-codequality-measure.yml` | `codequality-measure.yml` | `push main` | advisory | Run reek + flog + flay, upload `codequality-report` baseline (`reek.json` + `flog.txt` + `flay.txt`) |
 | `ruby-gem-codequality-pr.yml` | `codequality-pr.yml` | `pull_request` | advisory | Measure PR head + diff vs baseline (reek smells + flog/flay scores), sticky comment, **never fails** |
 
