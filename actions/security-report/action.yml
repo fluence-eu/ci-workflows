@@ -1,5 +1,5 @@
 name: Security Report
-description: Render a sticky-comment Markdown body summarising brakeman and bundler-audit findings.
+description: Render a sticky-comment Markdown body summarising brakeman, bundler-audit and ruby-audit findings.
 
 inputs:
   brakeman_outcome:
@@ -7,6 +7,9 @@ inputs:
     required: true
   audit_outcome:
     description: Outcome of the bundler-audit step (`success` or `failure`).
+    required: true
+  ruby_audit_outcome:
+    description: Outcome of the ruby-audit step (`success` or `failure`).
     required: true
   brakeman_path:
     description: Path to brakeman's JSON report (PR head).
@@ -16,12 +19,20 @@ inputs:
     description: Path to bundler-audit's captured text output (PR head).
     required: false
     default: 'audit.txt'
+  ruby_audit_path:
+    description: Path to ruby-audit's captured text output (PR head).
+    required: false
+    default: 'ruby_audit.txt'
   base_brakeman_path:
     description: Path to the baseline brakeman JSON report. Empty when no baseline is available — the report falls back to a current-state-only view.
     required: false
     default: ''
   base_audit_path:
     description: Path to the baseline bundler-audit text output. Empty when no baseline is available.
+    required: false
+    default: ''
+  base_ruby_audit_path:
+    description: Path to the baseline ruby-audit text output. Empty when no baseline is available.
     required: false
     default: ''
 
@@ -40,18 +51,24 @@ runs:
         GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
         BRAKEMAN_OUTCOME: ${{ inputs.brakeman_outcome }}
         AUDIT_OUTCOME: ${{ inputs.audit_outcome }}
+        RUBY_AUDIT_OUTCOME: ${{ inputs.ruby_audit_outcome }}
         BRAKEMAN_PATH: ${{ inputs.brakeman_path }}
         AUDIT_PATH: ${{ inputs.audit_path }}
+        RUBY_AUDIT_PATH: ${{ inputs.ruby_audit_path }}
         BASE_BRAKEMAN_PATH: ${{ inputs.base_brakeman_path }}
         BASE_AUDIT_PATH: ${{ inputs.base_audit_path }}
+        BASE_RUBY_AUDIT_PATH: ${{ inputs.base_ruby_audit_path }}
       run: |
         BODY="$(ruby "${GITHUB_ACTION_PATH}/security_report.rb" \
           "$BRAKEMAN_OUTCOME" \
           "$AUDIT_OUTCOME" \
+          "$RUBY_AUDIT_OUTCOME" \
           "$BRAKEMAN_PATH" \
           "$AUDIT_PATH" \
+          "$RUBY_AUDIT_PATH" \
           "$BASE_BRAKEMAN_PATH" \
-          "$BASE_AUDIT_PATH")"
+          "$BASE_AUDIT_PATH" \
+          "$BASE_RUBY_AUDIT_PATH")"
         {
           echo "body<<EOF"
           echo "<!-- security-report -->"
