@@ -500,6 +500,25 @@ Because `fluence-ci-tools` lives on GitHub Packages (private), each consumer wor
 
 The reusables in this repo already declare `packages: read` at the workflow level — consumers just need to forward the permission via their wrapper (see the templates above).
 
+### Local CI orchestration (optional)
+
+Since v0.3.0, `fluence-ci-tools` also ships a Rails generator and a `fluence-ci` CLI that scaffold a local `bin/ci` orchestration mirroring this catalog of reusables. Useful for devs who want to run the same checks pre-push without waiting for CI.
+
+**Rails app** — generator integrated with Rails 8's native `bin/ci` (`ActiveSupport::ContinuousIntegration`):
+```bash
+bin/rails generate fluence_ci:install   # injects extend + all() into config/ci.rb
+bin/ci                                    # runs Rails defaults + Fluence catalog
+```
+
+**Pure gem** — Thor CLI generates a Rake task:
+```bash
+bundle exec fluence-ci install            # writes lib/tasks/fluence_ci.rake
+bundle exec rake fluence_ci:check         # runs the whole catalog
+bundle exec rake fluence_ci:codequality   # or any single group
+```
+
+The generator's injected `all` call uses dynamic dispatch over `Fluence::Ci::Tools::Steps` — when the gem ships a new step group (e.g. `accessibility`), consumers pick it up via `bundle update fluence-ci-tools` without editing their `config/ci.rb` or rake task. Per-group args are overridable: `all(codequality: { paths: 'custom' })`.
+
 ---
 
 ## Manual republish
