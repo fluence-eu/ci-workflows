@@ -22,11 +22,6 @@ on:
         required: false
         type: string
         default: '4.0'
-      paths:
-        description: Space-separated source paths to scan (forwarded to ruby-gem-codequality-measure.yml).
-        required: false
-        type: string
-        default: 'lib'
       measure_workflow_file:
         description: Consumer workflow filename that uploaded the `codequality-report` artifact on the base branch (used to find the baseline).
         required: false
@@ -86,7 +81,6 @@ jobs:
     uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-measure.yml@v2
     with:
       ruby_version: ${{ inputs.ruby_version }}
-      paths:        ${{ inputs.paths }}
 
   comment:
     name: Comment on PR

@@ -1,7 +1,9 @@
 name: Ruby Gem — Code Quality Measure
 
-# Runs reek + flog + flay against the consumer's source paths,
-# captures their outputs, and uploads the lot as the
+# Runs reek + flog + flay against the consumer's source paths via the
+# `fluence-ci codequality --report` CLI (catalog defined in
+# Fluence::Ci::Tools::Steps), which writes the three machine-readable
+# reports under `tmp/fluence-report/` for upload as the
 # `codequality-report` artifact.
 #
 # Advisory only — none of the tools fail the workflow on findings;
@@ -10,6 +12,11 @@ name: Ruby Gem — Code Quality Measure
 # ruby-gem-rubocop-* if you want strict lint gating; the two
 # scopes are intentionally separate (style/correctness vs design
 # smell / complexity / duplication).
+#
+# Path detection lives in Steps#codequality: `app lib` for Rails
+# apps/engines (when `app/` exists), `lib` otherwise. Consumers that
+# need a custom set should override it in the gem itself rather than
+# threading a workflow input down to every reusable.
 #
 # Called from two places (mirrors ruby-gem-{docs,coverage,rubocop}-measure):
 # - the consumer's codequality-measure.yml on push to main, to
@@ -25,11 +32,6 @@ on:
         required: false
         type: string
         default: '4.0'
-      paths:
-        description: Space-separated source paths to scan (e.g. `lib` for gems, `app lib` for Rails apps). Reek also honours a project-local `.reek.yml` config.
-        required: false
-        type: string
-        default: 'lib'
 
 permissions:
   contents: read
@@ -54,42 +56,22 @@ jobs:
           ruby-version: ${{ inputs.ruby_version }}
           bundler-cache: true
 
-      - name: Run reek (code smells)
+      - name: Run codequality (reek + flog + flay)
+        # `--report` switches the catalog group to its machine-readable
+        # mode: reek/flog/flay write to tmp/fluence-report/{reek.json,
+        # flog.txt,flay.txt}. The CLI does not fail on findings — these
+        # tools are advisory; the PR sticky comment surfaces trends.
+        # `continue-on-error` is kept defensively so a tool crash
+        # (rather than a finding) doesn't abort the upload.
         continue-on-error: true
-        env:
-          PATHS: ${{ inputs.paths }}
-        # Reek prints to stdout (it has no --output flag) and exits
-        # non-zero on findings; `continue-on-error` keeps the workflow
-        # alive so flog and flay still run.
-        run: bundle exec reek --format json $PATHS > reek.json
-
-      - name: Run flog (complexity)
-        continue-on-error: true
-        env:
-          PATHS: ${{ inputs.paths }}
-        # `tee` keeps the human-readable view in the workflow logs
-        # while persisting it for the codequality-report composite.
-        # Flog itself never exits non-zero, so the outcome is mostly
-        # cosmetic.
-        shell: bash
-        run: |
-          set -o pipefail
-          bundle exec flog $PATHS | tee flog.txt
-
-      - name: Run flay (duplication)
-        continue-on-error: true
-        env:
-          PATHS: ${{ inputs.paths }}
-        shell: bash
-        run: |
-          set -o pipefail
-          bundle exec flay $PATHS | tee flay.txt
+        run: bundle exec fluence-ci codequality --report
 
       - name: Upload codequality report
         uses: actions/upload-artifact@v7
         with:
           name: codequality-report
-          path: |
-            reek.json
-            flog.txt
-            flay.txt
+          # The common ancestor (`tmp/fluence-report/`) is stripped by
+          # upload-artifact, so the artifact root contains the bare
+          # files (reek.json, flog.txt, flay.txt) — same shape the PR
+          # workflow already expects.
+          path: tmp/fluence-report/*
