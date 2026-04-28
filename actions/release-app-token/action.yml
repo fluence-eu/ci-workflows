@@ -2,20 +2,26 @@ name: Release App Token
 description: |
   Generate a GitHub App installation token from the Fluence release App.
   Centralises the create-github-app-token@v3 invocation that the
-  release/prepare-release workflows duplicate. App ID is read from
-  `vars.RELEASE_APP_ID` (org/repo variable) so the only thing the
-  caller has to forward is the private key (which can't be read by a
-  composite since secrets aren't accessible in composite scope).
+  release/prepare-release workflows duplicate.
+
+  Both `app-id` and `private-key` must be passed in by the caller —
+  per the GitHub Actions context-availability rules, neither `vars`
+  nor `secrets` are accessible inside a composite action. Callers
+  forward them via the `with:` block:
+    app-id      -> vars.RELEASE_APP_ID
+    private-key -> secrets.RELEASE_APP_PRIVATE_KEY
 
   When `private-key` is empty (e.g. a consumer that hasn't opted in
-  yet), the token-generation step is skipped and `outputs.token`
-  resolves to an empty string. Callers can then fall back to
-  `github.token` via:
-      ${{ steps.app-token.outputs.token || github.token }}
+  yet), the token-generation step is skipped and the outputs resolve
+  to empty strings. Callers can fall back to github.token by using
+  the GitHub Actions short-circuit operator on the output.
 
 inputs:
+  app-id:
+    description: GitHub App ID. Pass via `vars.RELEASE_APP_ID` from the calling workflow.
+    required: true
   private-key:
-    description: GitHub App private key (PEM). Pass via `secrets.RELEASE_APP_PRIVATE_KEY`. When empty the action no-ops and outputs.token is empty.
+    description: GitHub App private key (PEM). Pass via `secrets.RELEASE_APP_PRIVATE_KEY`. When empty the action no-ops and outputs are empty.
     required: false
     default: ''
 
@@ -34,5 +40,5 @@ runs:
       if: inputs.private-key != ''
       uses: actions/create-github-app-token@v3
       with:
-        app-id: ${{ vars.RELEASE_APP_ID }}
+        app-id: ${{ inputs.app-id }}
         private-key: ${{ inputs.private-key }}
