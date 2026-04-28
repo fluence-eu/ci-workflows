@@ -69,17 +69,21 @@ jobs:
           key: rubocop-${{ runner.os }}-${{ inputs.ruby_version }}-${{ hashFiles('**/.rubocop.yml', '**/.rubocop_todo.yml', 'Gemfile.lock', '*.gemspec') }}
           restore-keys: rubocop-${{ runner.os }}-${{ inputs.ruby_version }}-
 
-      - name: Run rubocop
+      # Invokes the gem's `lint --report` command (not `bundle exec
+      # rubocop` directly) so the catalog defined in
+      # `Fluence::Ci::Tools::Steps#lint` is the single source of truth.
+      # The same `bundle exec fluence-ci lint --report` runs locally
+      # via the consumer's `bin/fluence-ci`, guaranteeing zero drift
+      # between dev pre-push and CI.
+      - name: Run rubocop (via fluence-ci)
         id: rubocop
         continue-on-error: true
         env:
           RUBOCOP_CACHE_ROOT: tmp/rubocop
-        run: |
-          mkdir -p rubocop-report
-          bundle exec rubocop --format json --out rubocop-report/rubocop.json
+        run: bundle exec fluence-ci lint --report
 
       - name: Upload rubocop report
         uses: actions/upload-artifact@v7
         with:
           name: rubocop-report
-          path: rubocop-report/rubocop.json
+          path: tmp/fluence-report/rubocop.json
