@@ -50,7 +50,7 @@ jobs:
       - id: app-token
         uses: fluence-eu/ci-workflows/actions/release-app-token@v2
         with:
-          app-id: ${{ vars.RELEASE_APP_ID }}
+          client-id: ${{ vars.RELEASE_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
       - uses: actions/checkout@v6
