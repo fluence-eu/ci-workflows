@@ -66,6 +66,7 @@ jobs:
       - id: token
         uses: fluence-eu/ci-workflows/actions/release-app-token@v2
         with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
       - id: check
         env:
