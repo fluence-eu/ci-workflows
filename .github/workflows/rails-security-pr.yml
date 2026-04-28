@@ -28,20 +28,59 @@ on:
       FLUENCE_CI_BOT_PRIVATE_KEY:
         description: Optional GitHub App private key used to author the sticky PR comment. When omitted, the comment is posted as `github-actions[bot]` via the default `GITHUB_TOKEN`.
         required: false
+      RELEASE_APP_PRIVATE_KEY:
+        description: |
+          Optional release App private key. When forwarded, release PRs
+          (head_ref `release/v*` authored by the App) skip both measure
+          and comment jobs — skipped jobs report as `neutral` and count
+          as passing for required status checks, letting auto-merge
+          proceed. When omitted, all PRs run normally.
+        required: false
 
 permissions:
   contents: read
 
 jobs:
+  resolve-bot:
+    name: Resolve release-bot
+    runs-on: ubuntu-latest
+    outputs:
+      skip_release_pr: ${{ steps.check.outputs.skip }}
+    steps:
+      - id: token
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v2
+        with:
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+      - id: check
+        env:
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          SLUG: ${{ steps.token.outputs.app-slug }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          # Skip when both conditions hold: PR author is the release App
+          # AND head ref starts with `release/v`. SLUG is empty when the
+          # consumer didn't forward RELEASE_APP_PRIVATE_KEY — the empty
+          # match makes skip false, preserving the prior always-run
+          # behaviour.
+          if [ -n "$SLUG" ] && [ "$AUTHOR" = "${SLUG}[bot]" ] && [[ "$HEAD_REF" == release/v* ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Release PR detected — skipping measure + comment."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
   measure:
     name: Measure
+    needs: resolve-bot
+    if: needs.resolve-bot.outputs.skip_release_pr == 'false'
     uses: fluence-eu/ci-workflows/.github/workflows/rails-security-measure.yml@v2
     with:
       ruby_version: ${{ inputs.ruby_version }}
 
   comment:
     name: Comment on PR
-    needs: measure
+    needs: [resolve-bot, measure]
+    if: needs.resolve-bot.outputs.skip_release_pr == 'false'
     runs-on: ubuntu-latest
     permissions:
       contents: read
