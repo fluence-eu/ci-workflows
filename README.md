@@ -370,16 +370,39 @@ jobs:
 
 ## Required repo config
 
-Each consumer repo must expose:
+### GitHub App credentials
 
 | Kind | Name | Used by |
 |---|---|---|
-| var | `RELEASE_APP_ID` | `ruby-gem-prepare-release.yml`, `app-prepare-release.yml`, `app-release.yml` |
+| var | `RELEASE_CLIENT_ID` | `ruby-gem-prepare-release.yml`, `app-prepare-release.yml`, `app-release.yml`, all `*-pr.yml` reusables (skip-on-release-PR detection) |
 | secret | `RELEASE_APP_PRIVATE_KEY` | same |
+| var | `FLUENCE_CI_CLIENT_ID` | `*-pr.yml` reusables (sticky-comment author) |
+| secret | `FLUENCE_CI_BOT_PRIVATE_KEY` | same |
 
 `GITHUB_TOKEN` is auto-provided by Actions — never declared in `secrets:`.
 
-`RELEASE_APP_*` is the write-capable app that opens release PRs, tags releases, and force-pushes mirrors. No second GitHub App is required — PR workflows pull their helper scripts via composite actions (`actions/*-report/`) which inherit the org's Actions access level.
+`RELEASE_APP_*` is the write-capable app that opens release PRs, tags releases, and force-pushes mirrors. `FLUENCE_CI_BOT_*` is the read-only app that authors sticky PR comments so they show up as a verified bot rather than `github-actions[bot]`.
+
+### Gemfile dependency
+
+PR-side reusables (`ruby-gem-rubocop-pr`, `ruby-gem-coverage-pr`, `ruby-gem-codequality-pr`, `rails-security-pr`, `ruby-gem-docs-pr`) and their `*-measure` counterparts run `bundle install` then invoke `rubocop`, `reek`, `flog`, `flay`, `brakeman`, `bundler-audit`, `ruby_audit`, `yard`, `yardstick`, `simplecov`, `undercover`. The consumer repo must therefore ship those tools in its bundle.
+
+Add the [`fluence-ci-tools`](https://github.com/fluence-eu/fluence-ci-tools) meta-gem to the `Gemfile`:
+
+```ruby
+source 'https://rubygems.pkg.github.com/fluence-eu' do
+  gem 'fluence-ci-tools', require: false
+end
+```
+
+It pulls in all the tools above with the version pins the centralised workflows expect. Bumping a tool is `bundle update fluence-ci-tools`.
+
+Because `fluence-ci-tools` lives on GitHub Packages (private), each consumer workflow that runs `bundle install` must:
+
+- Grant `packages: read` on the calling job's `permissions:` block.
+- Set `BUNDLE_RUBYGEMS__PKG__GITHUB__COM: ${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}` as workflow-level env so Bundler can authenticate against the registry.
+
+The reusables in this repo already declare `packages: read` at the workflow level — consumers just need to forward the permission via their wrapper (see the templates above).
 
 ---
 
