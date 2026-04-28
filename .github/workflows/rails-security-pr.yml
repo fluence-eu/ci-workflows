@@ -144,9 +144,6 @@ jobs:
       - id: body
         uses: fluence-eu/ci-workflows/actions/security-report@v2
         with:
-          brakeman_outcome:     ${{ needs.measure.outputs.brakeman_outcome }}
-          audit_outcome:        ${{ needs.measure.outputs.audit_outcome }}
-          ruby_audit_outcome:   ${{ needs.measure.outputs.ruby_audit_outcome }}
           brakeman_path:        security-pr/brakeman.json
           audit_path:           security-pr/audit.txt
           ruby_audit_path:      security-pr/ruby_audit.txt
@@ -161,8 +158,8 @@ jobs:
           client-id:       ${{ vars.FLUENCE_CI_CLIENT_ID }}
           app-private-key: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
 
-      - name: Fail if any scan flagged findings
-        if: needs.measure.outputs.brakeman_outcome == 'failure' || needs.measure.outputs.audit_outcome == 'failure' || needs.measure.outputs.ruby_audit_outcome == 'failure'
+      - name: Fail if security scan flagged findings
+        if: needs.measure.outputs.security_outcome == 'failure'
         run: |
-          echo "::error::Security scan failed (brakeman: ${{ needs.measure.outputs.brakeman_outcome }}, bundler-audit: ${{ needs.measure.outputs.audit_outcome }}, ruby-audit: ${{ needs.measure.outputs.ruby_audit_outcome }})"
+          echo "::error::Security scan reported findings — see the sticky comment for details"
           exit 1

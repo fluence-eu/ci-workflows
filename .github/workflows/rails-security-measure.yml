@@ -28,15 +28,9 @@ on:
         type: string
         default: '4.0'
     outputs:
-      brakeman_outcome:
-        description: Outcome of the brakeman step (`success` / `failure`).
-        value: ${{ jobs.measure.outputs.brakeman_outcome }}
-      audit_outcome:
-        description: Outcome of the bundler-audit step (`success` / `failure`).
-        value: ${{ jobs.measure.outputs.audit_outcome }}
-      ruby_audit_outcome:
-        description: Outcome of the ruby-audit step (`success` / `failure`).
-        value: ${{ jobs.measure.outputs.ruby_audit_outcome }}
+      security_outcome:
+        description: Outcome of the combined security suite (`success` / `failure`).
+        value: ${{ jobs.measure.outputs.security_outcome }}
 
 permissions:
   contents: read
@@ -47,9 +41,7 @@ jobs:
     name: Measure
     runs-on: ubuntu-latest
     outputs:
-      brakeman_outcome: ${{ steps.brakeman.outcome }}
-      audit_outcome: ${{ steps.audit.outcome }}
-      ruby_audit_outcome: ${{ steps.ruby_audit.outcome }}
+      security_outcome: ${{ steps.security.outcome }}
     steps:
       - uses: actions/checkout@v6
 
@@ -65,43 +57,24 @@ jobs:
           ruby-version: ${{ inputs.ruby_version }}
           bundler-cache: true
 
-      - name: Run brakeman (Rails static analysis)
-        id: brakeman
+      # Invokes the gem's `security --report` command (not the three
+      # tools individually) so the catalog defined in
+      # `Fluence::Ci::Tools::Steps#security` is the single source of
+      # truth. The same command runs locally via the consumer's
+      # `bin/fluence-ci`, guaranteeing zero drift between dev pre-push
+      # and CI. The combined exit code is used as the single outcome;
+      # the security-report composite reads each tool's output file
+      # to render the per-tool ✓/✗ in the sticky comment.
+      - name: Run security suite (via fluence-ci)
+        id: security
         continue-on-error: true
-        run: bundle exec brakeman --no-pager --format json --output brakeman.json
-
-      - name: Run bundler-audit (gem CVE scan)
-        id: audit
-        continue-on-error: true
-        # `--update` refreshes the local CVE database before the
-        # check so a vulnerability disclosed since the previous run
-        # is still caught. `tee` keeps the human-readable output
-        # both in the logs and on disk for the report composite;
-        # `pipefail` preserves bundler-audit's exit code through
-        # the pipe so `continue-on-error` records the right outcome.
-        shell: bash
-        run: |
-          set -o pipefail
-          bundle exec bundler-audit check --update | tee audit.txt
-
-      - name: Run ruby-audit (Ruby/RubyGems CVE scan)
-        id: ruby_audit
-        continue-on-error: true
-        # `-n` skips ruby-audit's own ruby-advisory-db update because
-        # bundler-audit just refreshed the same shared DB above.
-        # ruby-audit has no machine-readable format, so `tee` mirrors
-        # stdout to disk for the report composite. `pipefail`
-        # preserves the exit code through the pipe.
-        shell: bash
-        run: |
-          set -o pipefail
-          bundle exec ruby-audit check -n | tee ruby_audit.txt
+        run: bundle exec fluence-ci security --report
 
       - name: Upload security report
         uses: actions/upload-artifact@v7
         with:
           name: security-report
           path: |
-            brakeman.json
-            audit.txt
-            ruby_audit.txt
+            tmp/fluence-report/brakeman.json
+            tmp/fluence-report/audit.txt
+            tmp/fluence-report/ruby_audit.txt
