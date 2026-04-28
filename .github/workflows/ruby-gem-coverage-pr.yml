@@ -55,6 +55,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   resolve-bot:
