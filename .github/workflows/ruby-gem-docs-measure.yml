@@ -1,8 +1,9 @@
 name: Ruby Gem — Docs Measure
 
-# Runs yardstick (measure + verify soft), uploads the report as
-# `yardstick-report`, and exposes the verify step's outcome as a
-# job output.
+# Runs `fluence-ci docs --report` (in-process yardstick measure +
+# threshold check via Fluence::Ci::Tools::YardstickRunner — no rake
+# dependency in the consumer's Rakefile), uploads the report as
+# `yardstick-report`, and exposes the step outcome as a job output.
 #
 # Called from two places:
 # - the consumer's `docs-measure.yml` on push to main, to produce the
@@ -10,13 +11,13 @@ name: Ruby Gem — Docs Measure
 # - ruby-gem-docs-pr.yml on pull_request, to measure the PR head
 #   (no duplication: same reusable, same behaviour).
 #
-# `doc:verify` runs with `continue-on-error: true`: a failure does
-# not abort the upload. The PR workflow consumes the verify_outcome
-# output to decide whether to fail the run (after posting the sticky
-# comment). The main-push invocation does not gate on the outcome —
-# threshold enforcement is PR-side, main cannot drift below
-# threshold without a PR having previously been merged that shouldn't
-# have passed.
+# The fluence-ci step runs with `continue-on-error: true`: a threshold
+# failure does not abort the upload. The PR workflow consumes the
+# verify_outcome output to decide whether to fail the run (after
+# posting the sticky comment). The main-push invocation does not gate
+# on the outcome — threshold enforcement is PR-side, main cannot drift
+# below threshold without a PR having previously been merged that
+# shouldn't have passed.
 
 on:
   workflow_call:
@@ -28,7 +29,7 @@ on:
         default: '4.0'
     outputs:
       verify_outcome:
-        description: Outcome of `rake doc:verify` (`success` / `failure`).
+        description: Outcome of the `fluence-ci docs --report` step (`success` when coverage ≥ threshold, `failure` otherwise).
         value: ${{ jobs.measure.outputs.verify_outcome }}
 
 permissions:
@@ -40,7 +41,7 @@ jobs:
     name: Measure
     runs-on: ubuntu-latest
     outputs:
-      verify_outcome: ${{ steps.verify.outcome }}
+      verify_outcome: ${{ steps.docs-report.outcome }}
     steps:
       - uses: actions/checkout@v6
 
@@ -70,13 +71,16 @@ jobs:
           key: yard-${{ runner.os }}-${{ inputs.ruby_version }}-${{ hashFiles('lib/**/*.rb', '.yardopts', '.yardstick.yml', 'Gemfile.lock', '*.gemspec') }}
           restore-keys: yard-${{ runner.os }}-${{ inputs.ruby_version }}-
 
-      - name: Run yardstick measurement
-        run: bundle exec rake doc:measure
-
-      - name: Run yardstick verify
-        id: verify
+      - name: Run yardstick measure + verify (in-process)
+        id: docs-report
+        # `fluence-ci docs --report` invokes the in-process
+        # YardstickRunner: it loads `.yardstick.yml`, measures, writes
+        # `doc/yardstick_report.txt`, and exits 1 if coverage is below
+        # the configured threshold. `continue-on-error` keeps the
+        # upload step alive on threshold failure; the PR workflow reads
+        # the step outcome via the job output to gate.
         continue-on-error: true
-        run: bundle exec rake doc:verify
+        run: bundle exec fluence-ci docs --report
 
       - name: Upload yardstick report
         uses: actions/upload-artifact@v7

@@ -23,10 +23,14 @@ on:
         type: string
         default: '4.0'
       paths:
-        description: Space-separated source paths to scan (forwarded to ruby-gem-codequality-measure.yml).
+        description: |
+          Optional space-separated source paths to scan, forwarded as
+          `--paths "..."` to `fluence-ci codequality`. When empty,
+          Steps#codequality auto-detects (`app lib` for Rails, `lib`
+          for plain gems). Useful for monorepos / non-standard layouts.
         required: false
         type: string
-        default: 'lib'
+        default: ''
       measure_workflow_file:
         description: Consumer workflow filename that uploaded the `codequality-report` artifact on the base branch (used to find the baseline).
         required: false
