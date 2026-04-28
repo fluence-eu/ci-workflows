@@ -14,9 +14,11 @@ name: Ruby Gem — Code Quality Measure
 # smell / complexity / duplication).
 #
 # Path detection lives in Steps#codequality: `app lib` for Rails
-# apps/engines (when `app/` exists), `lib` otherwise. Consumers that
-# need a custom set should override it in the gem itself rather than
-# threading a workflow input down to every reusable.
+# apps/engines (when `app/` exists), `lib` otherwise. Consumers with
+# a non-standard layout (monorepo / custom subdirs) can override via
+# the `paths` input below — it is forwarded to `fluence-ci
+# codequality --paths "..."` so the catalog method's auto-detection
+# is bypassed.
 #
 # Called from two places (mirrors ruby-gem-{docs,coverage,rubocop}-measure):
 # - the consumer's codequality-measure.yml on push to main, to
@@ -32,6 +34,14 @@ on:
         required: false
         type: string
         default: '4.0'
+      paths:
+        description: |
+          Optional space-separated source paths to scan (e.g. `gems/foo lib`
+          for monorepos). When omitted, Steps#codequality auto-detects:
+          `app lib` for Rails apps/engines, `lib` for plain gems.
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -63,8 +73,19 @@ jobs:
         # tools are advisory; the PR sticky comment surfaces trends.
         # `continue-on-error` is kept defensively so a tool crash
         # (rather than a finding) doesn't abort the upload.
+        # The optional `paths` input is forwarded as `--paths`; when
+        # empty the CLI omits the flag and Steps#codequality applies
+        # its `app lib` / `lib` auto-detection.
         continue-on-error: true
-        run: bundle exec fluence-ci codequality --report
+        env:
+          PATHS: ${{ inputs.paths }}
+        shell: bash
+        run: |
+          if [ -n "$PATHS" ]; then
+            bundle exec fluence-ci codequality --report --paths "$PATHS"
+          else
+            bundle exec fluence-ci codequality --report
+          fi
 
       - name: Upload codequality report
         uses: actions/upload-artifact@v7
