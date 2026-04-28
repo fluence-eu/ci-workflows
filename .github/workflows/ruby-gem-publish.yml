@@ -13,7 +13,7 @@ on:
         required: true
         type: string
       tag:
-        description: Tag to publish. Optional when called from `on: release` (the event provides it); required when called from `workflow_dispatch`.
+        description: 'Tag to publish. Optional when called from `on: release` (the event provides it); required when called from `workflow_dispatch`.'
         required: false
         type: string
         default: ''
