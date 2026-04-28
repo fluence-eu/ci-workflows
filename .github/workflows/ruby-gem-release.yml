@@ -48,6 +48,12 @@ jobs:
         run: |
           git fetch --tags
           if git rev-parse "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            # Path-filtered triggers fire on any commit that touches
+            # version.rb — including style fixes that don't actually
+            # bump the constant. When that happens we hit a tag that
+            # already exists; skip the rest of the job rather than
+            # 422-ing on `gh release create`.
+            echo "::notice::Tag ${{ steps.version.outputs.tag }} already exists — skipping release (version.rb modified without a bump)."
             echo "exists=true" >> $GITHUB_OUTPUT
           else
             echo "exists=false" >> $GITHUB_OUTPUT
@@ -62,11 +68,13 @@ jobs:
           git push origin "${{ steps.version.outputs.tag }}"
 
       - name: Extract changelog for version
+        if: steps.check.outputs.exists == 'false'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           awk "/^## \[$VERSION\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md > release-notes.md
 
       - name: Create GitHub Release
+        if: steps.check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -75,9 +83,11 @@ jobs:
             --notes-file release-notes.md
 
       - name: Build gem
+        if: steps.check.outputs.exists == 'false'
         run: gem build ${{ inputs.gem_name }}.gemspec
 
       - name: Attach gem to release
+        if: steps.check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload ${{ steps.version.outputs.tag }} ${{ inputs.gem_name }}-*.gem --clobber
