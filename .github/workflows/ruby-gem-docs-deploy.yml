@@ -59,12 +59,14 @@ jobs:
           restore-keys: yard-${{ runner.os }}-${{ inputs.ruby_version }}-
 
       - name: Build YARD site
-        # Invokes the yard CLI directly instead of going through
-        # `rake doc:build`. yard's own CLI handles the build natively
-        # — no need for the consumer to define a `YARD::Rake::YardocTask`
-        # rake wrapper. Default output is `doc/`, picked up by the
-        # next step.
-        run: bundle exec yard doc
+        # `fluence-ci docs --build` (fluence-ci-tools v0.6+) invokes
+        # `bundle exec yard doc` under the catalog. Same effective
+        # behaviour as a direct yard CLI call, but routes through the
+        # central catalog so the docs-deploy step lines up with the
+        # rest of the v3 reusables (no consumer Rakefile dependency,
+        # one CLI surface end to end). Output path (`doc/`) unchanged
+        # — picked up by the next step.
+        run: bundle exec fluence-ci docs --build
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
