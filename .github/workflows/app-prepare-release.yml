@@ -48,7 +48,7 @@ jobs:
 
     steps:
       - id: app-token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v2
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v3
         with:
           client-id: ${{ vars.RELEASE_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
