@@ -68,7 +68,7 @@ jobs:
       skip_release_pr: ${{ steps.check.outputs.skip }}
     steps:
       - id: token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v2
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v3
         with:
           client-id: ${{ vars.RELEASE_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
@@ -94,7 +94,7 @@ jobs:
     name: Measure
     needs: resolve-bot
     if: needs.resolve-bot.outputs.skip_release_pr == 'false'
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-measure.yml@v2
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-measure.yml@v3
     with:
       ruby_version: ${{ inputs.ruby_version }}
       command: ${{ inputs.command }}
@@ -134,7 +134,7 @@ jobs:
 
       - name: Find latest base-branch run with coverage artifact
         id: base-run
-        uses: fluence-eu/ci-workflows/actions/find-base-run@v2
+        uses: fluence-eu/ci-workflows/actions/find-base-run@v3
         with:
           workflow_file: ${{ inputs.measure_workflow_file }}
 
@@ -174,14 +174,14 @@ jobs:
           fi
 
       - id: body
-        uses: fluence-eu/ci-workflows/actions/coverage-report@v2
+        uses: fluence-eu/ci-workflows/actions/coverage-report@v3
         with:
           outcome:   ${{ steps.coverage.outcome }}
           base_ref:  origin/${{ github.base_ref }}
           pr_path:   coverage/.resultset.json
           base_path: ${{ steps.base.outputs.path }}
 
-      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v2
+      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v3
         with:
           marker:          '<!-- coverage-report -->'
           body:            ${{ steps.body.outputs.body }}

@@ -49,7 +49,7 @@ jobs:
       skip_release_pr: ${{ steps.check.outputs.skip }}
     steps:
       - id: token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v2
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v3
         with:
           client-id: ${{ vars.RELEASE_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
@@ -75,7 +75,7 @@ jobs:
     name: Measure
     needs: resolve-bot
     if: needs.resolve-bot.outputs.skip_release_pr == 'false'
-    uses: fluence-eu/ci-workflows/.github/workflows/rails-security-measure.yml@v2
+    uses: fluence-eu/ci-workflows/.github/workflows/rails-security-measure.yml@v3
     with:
       ruby_version: ${{ inputs.ruby_version }}
 
@@ -102,7 +102,7 @@ jobs:
 
       - name: Find latest base-branch run with security report
         id: base-run
-        uses: fluence-eu/ci-workflows/actions/find-base-run@v2
+        uses: fluence-eu/ci-workflows/actions/find-base-run@v3
         with:
           workflow_file: ${{ inputs.measure_workflow_file }}
 
@@ -142,7 +142,7 @@ jobs:
           bundler-cache: true
 
       - id: body
-        uses: fluence-eu/ci-workflows/actions/security-report@v2
+        uses: fluence-eu/ci-workflows/actions/security-report@v3
         with:
           brakeman_path:        security-pr/brakeman.json
           audit_path:           security-pr/audit.txt
@@ -151,7 +151,7 @@ jobs:
           base_audit_path:      ${{ steps.base.outputs.audit }}
           base_ruby_audit_path: ${{ steps.base.outputs.ruby_audit }}
 
-      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v2
+      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v3
         with:
           marker:          '<!-- security-report -->'
           body:            ${{ steps.body.outputs.body }}

@@ -61,7 +61,7 @@ jobs:
       skip_release_pr: ${{ steps.check.outputs.skip }}
     steps:
       - id: token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v2
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v3
         with:
           client-id: ${{ vars.RELEASE_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
@@ -87,7 +87,7 @@ jobs:
     name: Measure
     needs: resolve-bot
     if: needs.resolve-bot.outputs.skip_release_pr == 'false'
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-measure.yml@v2
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-measure.yml@v3
     with:
       ruby_version: ${{ inputs.ruby_version }}
       paths:        ${{ inputs.paths }}
@@ -115,7 +115,7 @@ jobs:
 
       - name: Find latest base-branch run with codequality report
         id: base-run
-        uses: fluence-eu/ci-workflows/actions/find-base-run@v2
+        uses: fluence-eu/ci-workflows/actions/find-base-run@v3
         with:
           workflow_file: ${{ inputs.measure_workflow_file }}
 
@@ -155,7 +155,7 @@ jobs:
           bundler-cache: true
 
       - id: body
-        uses: fluence-eu/ci-workflows/actions/codequality-report@v2
+        uses: fluence-eu/ci-workflows/actions/codequality-report@v3
         with:
           reek_path:      codequality-pr/reek.json
           flog_path:      codequality-pr/flog.txt
@@ -164,7 +164,7 @@ jobs:
           base_flog_path: ${{ steps.base.outputs.flog }}
           base_flay_path: ${{ steps.base.outputs.flay }}
 
-      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v2
+      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v3
         with:
           marker:          '<!-- codequality-report -->'
           body:            ${{ steps.body.outputs.body }}
