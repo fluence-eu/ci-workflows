@@ -111,10 +111,16 @@ When you add a helper:
 
 ### Active major tag is mobile
 
-The current major tag (`v3` as of writing — `v1` and `v2` are frozen at their last commits) is force-moved to every new commit on `main`. Consumers pin the active major and pick up non-breaking changes automatically. **The maintainer merging a PR is responsible for moving the tag** — there is no automation today, the move is an explicit step that gates the change reaching consumers.
+The current major tag (`v3` as of writing — `v1` and `v2` are frozen at their last commits) is force-moved to every new commit on `main`. Consumers pin the active major and pick up non-breaking changes automatically. **The maintainer merging a PR is responsible for moving the tag** — the move is an explicit step that gates the change reaching consumers.
 
+Two ways to do it:
+
+**From the GitHub UI** (preferred):
+1. Open *Actions* → *Move major tag* → *Run workflow*.
+2. Pass the major tag (`v3` to fast-forward, `v4` to cut the next major) and leave `ref` empty to point at main HEAD.
+
+**Locally**:
 ```bash
-# After merging the PR on GitHub, locally:
 git fetch origin main
 git checkout main && git pull
 git tag -f v3                # current major
