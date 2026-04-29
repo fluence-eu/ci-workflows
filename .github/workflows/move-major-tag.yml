@@ -1,0 +1,59 @@
+name: Move major tag
+
+# Manually dispatch to create or force-move a major version tag
+# (`v3`, `v4`, …) to the latest commit on main (or to an arbitrary
+# commit via the `ref` input). Replaces the manual
+# `git tag -f vN && git push origin vN --force` documented in
+# CONTRIBUTING.md — same effect, run from the GitHub UI.
+#
+# Tag input is constrained to `^v[0-9]+$` so this workflow only
+# operates on the mobile major-tag pattern. Patch / minor tags
+# (`v3.0.0`, etc.) are not in scope; cut those manually if needed.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to create or move (e.g. v3 for the active major, v4 to cut a new major)'
+        required: true
+        type: string
+      ref:
+        description: 'Commit SHA or ref to point at. Default = main HEAD at workflow run time.'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  move:
+    name: Force-move tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Full history so arbitrary refs (SHA, branch name) passed
+          # via `inputs.ref` resolve correctly.
+          fetch-depth: 0
+
+      - name: Validate tag input
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+$ ]]; then
+            echo "::error::tag must match ^v[0-9]+$ (e.g. v3, v4) — got: $TAG"
+            exit 1
+          fi
+
+      - name: Move/create tag
+        env:
+          TAG: ${{ inputs.tag }}
+          REF: ${{ inputs.ref }}
+        run: |
+          target="${REF:-HEAD}"
+          # `git tag -f` creates the tag if missing, force-moves it
+          # if it already exists. Same call covers both cases.
+          git tag -f "$TAG" "$target"
+          git push origin "$TAG" --force
+          echo "::notice::$TAG now points at $(git rev-parse --short "$TAG")"
