@@ -20,11 +20,14 @@ on:
         required: false
         type: string
         default: '4.0'
-      rake_task:
-        description: Rake task to run for coverage generation (e.g. `spec` for rspec-based gems, `test` for minitest-based gems). Forwarded to ruby-gem-coverage-measure.yml.
+      command:
+        description: |
+          Optional explicit test command forwarded as `--command "..."`
+          to `fluence-ci tests` via ruby-gem-coverage-measure.yml. When
+          empty, Steps#tests auto-detects.
         required: false
         type: string
-        default: 'spec'
+        default: ''
       measure_workflow_file:
         description: Consumer workflow filename that uploaded the `coverage` artifact on the base branch (used to find the baseline).
         required: false
@@ -94,7 +97,7 @@ jobs:
     uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-measure.yml@v2
     with:
       ruby_version: ${{ inputs.ruby_version }}
-      rake_task: ${{ inputs.rake_task }}
+      command: ${{ inputs.command }}
 
   comment:
     name: Comment on PR

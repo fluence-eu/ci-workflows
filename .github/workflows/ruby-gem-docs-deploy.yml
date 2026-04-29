@@ -59,7 +59,12 @@ jobs:
           restore-keys: yard-${{ runner.os }}-${{ inputs.ruby_version }}-
 
       - name: Build YARD site
-        run: bundle exec rake doc:build
+        # Invokes the yard CLI directly instead of going through
+        # `rake doc:build`. yard's own CLI handles the build natively
+        # — no need for the consumer to define a `YARD::Rake::YardocTask`
+        # rake wrapper. Default output is `doc/`, picked up by the
+        # next step.
+        run: bundle exec yard doc
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
