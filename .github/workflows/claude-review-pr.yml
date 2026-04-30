@@ -41,6 +41,20 @@ on:
         required: false
         type: number
         default: 1
+      show_full_output:
+        description: |
+          Forwarded to anthropics/claude-code-action. When `true`, the
+          full SDK output (each tool call, each denial reason, each
+          message) is written to the Actions log instead of being
+          masked behind 'full output hidden for security'. Useful to
+          debug WHY claude consumes turns without posting (e.g. inspect
+          permission_denials_count, see exact denied tool names).
+          Leave `false` outside of debug — repos privés OK, mais le log
+          peut contenir des extraits de code, des noms de chemins, ou
+          d'autres details de la PR.
+        required: false
+        type: boolean
+        default: false
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         description: |
@@ -160,3 +174,4 @@ jobs:
           prompt: ${{ steps.prompt.outputs.body }}
           claude_args: ${{ inputs.claude_args }}
           use_sticky_comment: true
+          show_full_output: ${{ inputs.show_full_output }}
