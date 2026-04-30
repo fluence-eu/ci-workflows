@@ -14,12 +14,17 @@ on:
     inputs:
       claude_args:
         description: |
-          Additional CLI args forwarded to Claude Code (e.g.
-          `--max-turns 15 --model claude-sonnet-4-6`). Defaults bound the
-          run so a chatty review can't loop indefinitely.
+          Additional CLI args forwarded to Claude Code. Default whitelists
+          the GitHub commenting tools (without it, Claude tries to call
+          them, gets denied and loops until --max-turns runs out — see
+          permission_denials_count in the SDK output) and bounds the run.
+          Override only if you need a different model or extra tools — and
+          remember to keep the comment whitelist or Claude will go silent.
+          Reference: anthropics/claude-code-action examples/pr-review-comprehensive.yml
         required: false
         type: string
-        default: '--max-turns 20'
+        default: |
+          --max-turns 20 --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
       prompt:
         description: |
           Override the default review prompt. When omitted, Claude is asked
