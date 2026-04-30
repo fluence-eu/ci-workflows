@@ -109,10 +109,11 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           # Stay injection-safe: user-controllable values (REPO, PR_NUMBER,
-          # OVERRIDE) flow through env, never inline `${{ }}` interpolation
-          # into the shell, and the heredoc terminator is unique enough not
-          # to collide with normal prose. `body` is multi-line, so it's
-          # emitted with the GH Actions multi-line-output protocol.
+          # OVERRIDE) flow through env, never inlined as GH Actions
+          # expressions inside the run script. The heredoc terminator is
+          # unique enough not to collide with normal prose. `body` is
+          # multi-line, so it's emitted with the GH Actions
+          # multi-line-output protocol.
           if [ -n "$OVERRIDE" ]; then
             {
               echo 'body<<__CLAUDE_REVIEW_EOF__'
