@@ -120,12 +120,50 @@ jobs:
         with:
           fetch-depth: ${{ inputs.checkout_fetch_depth }}
 
+      - name: Detect MCP-eligible stacks
+        id: detect
+        run: |
+          # Each block emits `<key>=true` to GITHUB_OUTPUT when its stack
+          # is present in the consumer repo. Detection must be idempotent
+          # and side-effect free. To wire a new stack:
+          #   1. Add a detection block here
+          #   2. Add a server entry in "Build MCP config" below
+          #   3. Add a tool-usage nudge in "Resolve review prompt"
+          if [ -f package.json ] && jq -e '.dependencies.vuetify // .devDependencies.vuetify' package.json >/dev/null 2>&1; then
+            echo "vuetify=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build MCP config
+        id: mcp
+        env:
+          VUETIFY: ${{ steps.detect.outputs.vuetify }}
+        run: |
+          # Each detected stack contributes one entry to mcpServers; the
+          # additional --allowedTools list is derived from the JSON keys
+          # (mcp__<key>__*) so we don't hand-maintain a parallel list.
+          # When no stack is detected, `config_path` and `tools` stay
+          # empty and the next step skips the augmentation entirely.
+          servers='{}'
+          if [ "$VUETIFY" = "true" ]; then
+            servers=$(jq '. + { vuetify: { type: "http", url: "https://mcp.vuetifyjs.com/mcp" } }' <<< "$servers")
+          fi
+          if [ "$servers" = "{}" ]; then
+            echo "config_path=" >> "$GITHUB_OUTPUT"
+            echo "tools="       >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          jq -n --argjson s "$servers" '{ mcpServers: $s }' > "$RUNNER_TEMP/mcp.json"
+          tools=$(jq -r 'keys | map("mcp__\(.)__*") | join(",")' <<< "$servers")
+          echo "config_path=$RUNNER_TEMP/mcp.json" >> "$GITHUB_OUTPUT"
+          echo "tools=$tools"                       >> "$GITHUB_OUTPUT"
+
       - name: Resolve review prompt
         id: prompt
         env:
           OVERRIDE: ${{ inputs.prompt }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          VUETIFY: ${{ steps.detect.outputs.vuetify }}
         run: |
           # Stay injection-safe: user-controllable values (REPO, PR_NUMBER,
           # OVERRIDE) flow through env, never inlined as GH Actions
@@ -133,18 +171,23 @@ jobs:
           # unique enough not to collide with normal prose. `body` is
           # multi-line, so it's emitted with the GH Actions
           # multi-line-output protocol.
+          # When the consumer overrides `prompt`, we use it verbatim — they
+          # take full responsibility for tool-usage hints. The default-prompt
+          # path appends a per-stack nudge so Claude actually invokes the
+          # MCP rather than relying on training-data recall.
           if [ -n "$OVERRIDE" ]; then
             {
               echo 'body<<__CLAUDE_REVIEW_EOF__'
               printf '%s\n' "$OVERRIDE"
               echo '__CLAUDE_REVIEW_EOF__'
             } >> "$GITHUB_OUTPUT"
-          else
-            {
-              echo 'body<<__CLAUDE_REVIEW_EOF__'
-              printf 'REPO: %s\n' "$REPO"
-              printf 'PR NUMBER: %s\n\n' "$PR_NUMBER"
-              cat <<'PROMPT'
+            exit 0
+          fi
+          {
+            echo 'body<<__CLAUDE_REVIEW_EOF__'
+            printf 'REPO: %s\n' "$REPO"
+            printf 'PR NUMBER: %s\n\n' "$PR_NUMBER"
+            cat <<'PROMPT'
           Please review this pull request. Focus on, in order:
 
           - Correctness — bugs, off-by-one, missing edge cases, broken
@@ -164,14 +207,49 @@ jobs:
           they actually impair readability. If the PR looks clean, say so
           briefly rather than inventing concerns.
           PROMPT
-              echo '__CLAUDE_REVIEW_EOF__'
-            } >> "$GITHUB_OUTPUT"
+            if [ "$VUETIFY" = "true" ]; then
+              cat <<'NUDGE'
+
+          Vuetify is used in this repo. The `mcp__vuetify__*` tools give
+          you authoritative access to component APIs, prop names, slot
+          names, and composable signatures. Before flagging anything
+          related to a `<v-*>` component, a `use*` composable, or a
+          Vuetify import, call the relevant MCP tool to verify the API
+          rather than rely on training-data recall.
+          NUDGE
+            fi
+            echo '__CLAUDE_REVIEW_EOF__'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Assemble Claude args
+        id: args
+        env:
+          BASE: ${{ inputs.claude_args }}
+          MCP_PATH: ${{ steps.mcp.outputs.config_path }}
+          EXTRA_TOOLS: ${{ steps.mcp.outputs.tools }}
+        run: |
+          # Augment the user-provided claude_args with the per-stack MCP
+          # config when at least one stack was detected. claude-code-action
+          # already concatenates user claude_args with its own --mcp-config
+          # and --allowedTools flags, and claude CLI handles repeated
+          # --allowedTools additively (verified against the action's
+          # parse-tools tests + tag-mode runtime behaviour), so appending
+          # is safe and doesn't clobber the existing GitHub commenting
+          # whitelist.
+          args="$BASE"
+          if [ -n "$MCP_PATH" ]; then
+            args="$args --mcp-config $MCP_PATH --allowedTools $EXTRA_TOOLS"
           fi
+          {
+            echo 'value<<__CLAUDE_ARGS_EOF__'
+            printf '%s\n' "$args"
+            echo '__CLAUDE_ARGS_EOF__'
+          } >> "$GITHUB_OUTPUT"
 
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: ${{ steps.prompt.outputs.body }}
-          claude_args: ${{ inputs.claude_args }}
+          claude_args: ${{ steps.args.outputs.value }}
           use_sticky_comment: true
           show_full_output: ${{ inputs.show_full_output }}
