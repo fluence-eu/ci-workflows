@@ -1,0 +1,156 @@
+name: Claude — PR Review
+
+# Runs on pull requests. Delegates the review to anthropics/claude-code-action,
+# authenticated via a Pro/Max OAuth token (CLAUDE_CODE_OAUTH_TOKEN) so the run
+# bills against the subscription quota instead of metered API credits.
+#
+# The action posts a single sticky summary comment plus inline review comments
+# on the lines it flags. Release PRs (head_ref `release/v*` authored by the
+# release App) are skipped to keep the auto-merge path clean and avoid burning
+# review budget on mechanical changelog/version bumps.
+
+on:
+  workflow_call:
+    inputs:
+      claude_args:
+        description: |
+          Additional CLI args forwarded to Claude Code (e.g.
+          `--max-turns 15 --model claude-sonnet-4-6`). Defaults bound the
+          run so a chatty review can't loop indefinitely.
+        required: false
+        type: string
+        default: '--max-turns 20'
+      prompt:
+        description: |
+          Override the default review prompt. When omitted, Claude is asked
+          to focus on correctness, security, performance, maintainability
+          and project conventions, and to leave inline comments for
+          specific code issues.
+        required: false
+        type: string
+        default: ''
+      checkout_fetch_depth:
+        description: |
+          Depth used by actions/checkout. `1` (default) is enough for the PR
+          diff; bump to `0` if the prompt needs full history (e.g. blame).
+        required: false
+        type: number
+        default: 1
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN:
+        description: |
+          OAuth token generated locally by `claude setup-token` against a
+          Claude Pro or Max subscription. Using this rather than
+          `ANTHROPIC_API_KEY` consumes the subscription quota instead of
+          metered API credits — make sure no `ANTHROPIC_API_KEY` is also
+          forwarded to the runner, otherwise it takes precedence.
+        required: true
+      RELEASE_APP_PRIVATE_KEY:
+        description: |
+          Optional release App private key. When forwarded, release PRs
+          (head_ref `release/v*` authored by the App) skip the review job —
+          letting auto-merge proceed without burning Claude budget on
+          mechanical changelog/version bumps. When omitted, all PRs run.
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  resolve-bot:
+    name: Resolve release-bot
+    runs-on: ubuntu-latest
+    outputs:
+      skip_release_pr: ${{ steps.check.outputs.skip }}
+    steps:
+      - id: token
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+      - id: check
+        env:
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          SLUG: ${{ steps.token.outputs.app-slug }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          # Skip when both conditions hold: PR author is the release App
+          # AND head ref starts with `release/v`. SLUG is empty when the
+          # consumer didn't forward RELEASE_APP_PRIVATE_KEY — the empty
+          # match makes skip false, preserving the always-run behaviour.
+          if [ -n "$SLUG" ] && [ "$AUTHOR" = "${SLUG}[bot]" ] && [[ "$HEAD_REF" == release/v* ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Release PR detected — skipping Claude review."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  review:
+    name: Review
+    needs: resolve-bot
+    if: needs.resolve-bot.outputs.skip_release_pr == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: ${{ inputs.checkout_fetch_depth }}
+
+      - name: Resolve review prompt
+        id: prompt
+        env:
+          OVERRIDE: ${{ inputs.prompt }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Stay injection-safe: user-controllable values (REPO, PR_NUMBER,
+          # OVERRIDE) flow through env, never inline `${{ }}` interpolation
+          # into the shell, and the heredoc terminator is unique enough not
+          # to collide with normal prose. `body` is multi-line, so it's
+          # emitted with the GH Actions multi-line-output protocol.
+          if [ -n "$OVERRIDE" ]; then
+            {
+              echo 'body<<__CLAUDE_REVIEW_EOF__'
+              printf '%s\n' "$OVERRIDE"
+              echo '__CLAUDE_REVIEW_EOF__'
+            } >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo 'body<<__CLAUDE_REVIEW_EOF__'
+              printf 'REPO: %s\n' "$REPO"
+              printf 'PR NUMBER: %s\n\n' "$PR_NUMBER"
+              cat <<'PROMPT'
+          Please review this pull request. Focus on, in order:
+
+          - Correctness — bugs, off-by-one, missing edge cases, broken
+            invariants, error paths that swallow failures.
+          - Security — injection, auth/authz gaps, secrets leakage, unsafe
+            deserialisation, SSRF, mass-assignment.
+          - Performance — N+1 queries, blocking IO on the request path,
+            obvious hot loops or accidental O(n^2).
+          - Maintainability — naming, dead code, missing tests on new
+            behaviour, leaking abstraction.
+          - Project conventions — match the surrounding style; do NOT
+            suggest churn or refactors outside the PR's scope.
+
+          Use `mcp__github_inline_comment__create_inline_comment` for
+          specific code issues, and `gh pr comment` for the overall
+          summary. Keep findings actionable. Skip cosmetic nits unless
+          they actually impair readability. If the PR looks clean, say so
+          briefly rather than inventing concerns.
+          PROMPT
+              echo '__CLAUDE_REVIEW_EOF__'
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: ${{ steps.prompt.outputs.body }}
+          claude_args: ${{ inputs.claude_args }}
+          use_sticky_comment: true
