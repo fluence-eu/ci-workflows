@@ -9,6 +9,7 @@ Workflow families:
 | `ruby-gem-*` | Semver bump, `.gemspec` build, attach to GitHub Release, push to GitHub Packages | `fluence-gateway-client`, `fluence-gateway-auth`, `mosaic-sdk` |
 | `app-*` | Timestamp tag, git-cliff changelog auto-merged on `develop`, force-push mirror to `main` | `gateway` |
 | `rails-*` | Rails-app-specific checks (brakeman, bundler-audit, etc.) | `gateway` |
+| `claude-*` | Language-agnostic AI gates backed by `anthropics/claude-code-action` against a Pro/Max OAuth token | (any consumer) |
 
 For contributor guidelines and design principles, see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
@@ -44,6 +45,34 @@ Most gates are **strict** — the PR fails when findings are introduced. The cod
 | `rails-security-pr.yml` | `security-pr.yml` | `pull_request` | strict | Measure PR head + diff vs baseline (brakeman fingerprints + CVE IDs; ruby-audit outcome-only, no diff), sticky comment, fail on findings |
 | `ruby-gem-codequality-measure.yml` | `codequality-measure.yml` | `push main` | advisory | Run reek + flog + flay, upload `codequality-report` baseline (`reek.json` + `flog.txt` + `flay.txt`) |
 | `ruby-gem-codequality-pr.yml` | `codequality-pr.yml` | `pull_request` | advisory | Measure PR head + diff vs baseline (reek smells + flog/flay scores), sticky comment, **never fails** |
+
+### AI review (Claude)
+
+Language-agnostic. Auth flows through `CLAUDE_CODE_OAUTH_TOKEN` (generated locally via `claude setup-token`), so runs bill against a Claude Pro/Max subscription instead of metered API credits. Release PRs (head_ref `release/v*` authored by the release App) are skipped when `RELEASE_APP_PRIVATE_KEY` is forwarded.
+
+| Central workflow | Consumer file | Trigger | Mode | Role |
+|---|---|---|---|---|
+| `claude-review-pr.yml` | `claude-review-pr.yml` | `pull_request` | advisory | Sticky summary + inline review comments via `anthropics/claude-code-action@v1`. Never fails the PR — Claude is one reviewer among others, not a gate. |
+
+Minimal consumer:
+
+```yaml
+name: Claude review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    uses: fluence-eu/ci-workflows/.github/workflows/claude-review-pr.yml@v3
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}  # optional — skips release PRs
+```
 
 ### Docs deploy
 
