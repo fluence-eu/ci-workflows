@@ -220,6 +220,8 @@ jobs:
           summary. Keep findings actionable. Skip cosmetic nits unless
           they actually impair readability. If the PR looks clean, say so
           briefly rather than inventing concerns.
+
+          Write the review (summary comment and inline comments) in French.
           PROMPT
             if [ "$VUETIFY" = "true" ]; then
               cat <<'NUDGE'
