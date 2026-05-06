@@ -218,8 +218,12 @@ jobs:
           Use `mcp__github_inline_comment__create_inline_comment` for
           specific code issues, and `gh pr comment` for the overall
           summary. Keep findings actionable. Skip cosmetic nits unless
-          they actually impair readability. If the PR looks clean, say so
-          briefly rather than inventing concerns.
+          they actually impair readability. ALWAYS post a summary comment
+          via `gh pr comment` before finishing — even when the PR is
+          clean and you have no findings, post a short acknowledgement
+          (e.g. "Review terminée — rien à signaler.") so the absence of
+          issues is visible and not confused with a silent or failed run.
+          Do not invent concerns just to fill the comment.
 
           Write the review (summary comment and inline comments) in French.
           PROMPT
