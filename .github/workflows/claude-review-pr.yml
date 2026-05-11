@@ -270,7 +270,14 @@ jobs:
             echo '__CLAUDE_ARGS_EOF__'
           } >> "$GITHUB_OUTPUT"
 
+      # A review is advisory — failures inside the action (missing native
+      # binary, quota exhaustion, transient SDK errors, max-turns blowups…)
+      # should not turn the PR's check red. `continue-on-error: true`
+      # leaves a visible warning on the step and keeps the job green.
+      # Plumbing steps above stay strict on purpose: those failures point
+      # to bugs in this workflow, not to Claude misbehaving.
       - uses: anthropics/claude-code-action@v1
+        continue-on-error: true
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: ${{ steps.prompt.outputs.body }}
