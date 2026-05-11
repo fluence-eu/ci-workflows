@@ -508,6 +508,8 @@ jobs:
 
 `RELEASE_APP_*` is the write-capable app that opens release PRs, tags releases, and force-pushes mirrors. `FLUENCE_CI_BOT_*` is the read-only app that authors sticky PR comments so they show up as a verified bot rather than `github-actions[bot]`.
 
+All four entries above are configured at the **`fluence-eu` organisation level** and automatically inherited by every repo in the org — a new consumer in `fluence-eu` does **not** need to copy them into its own Secrets / Variables. Repos outside the org must declare them per-repo.
+
 ### Gemfile dependency
 
 PR-side reusables (`ruby-gem-rubocop-pr`, `ruby-gem-coverage-pr`, `ruby-gem-codequality-pr`, `rails-security-pr`, `ruby-gem-docs-pr`) and their `*-measure` counterparts run `bundle install` then invoke `rubocop`, `reek`, `flog`, `flay`, `brakeman`, `bundler-audit`, `ruby_audit`, `yard`, `yardstick`, `simplecov`, `undercover`. The consumer repo must therefore ship those tools in its bundle.
@@ -526,6 +528,7 @@ Because `fluence-ci-tools` lives on GitHub Packages (private), each consumer wor
 
 - Grant `packages: read` on the calling job's `permissions:` block.
 - Set `BUNDLE_RUBYGEMS__PKG__GITHUB__COM: ${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}` as workflow-level env so Bundler can authenticate against the registry.
+- **Be allow-listed on the package itself.** Per-package access is not org-inherited — open each private package's settings (e.g. https://github.com/orgs/fluence-eu/packages/rubygems/package/fluence-ci-tools/settings) → **Manage Actions access** → **Add repository** → select the new consumer repo → Role: **Read**. Repeat for every entry inside the `source 'https://rubygems.pkg.github.com/fluence-eu' do … end` block of the Gemfile (`mosaic-sdk`, `money-fluence-exchange`, `fluence-gateway-auth`, …). Without this, `bundle install` fails with `authentication is required` even when `packages: read` and the `BUNDLE_…` env var are set correctly.
 
 The reusables in this repo already declare `packages: read` at the workflow level — consumers just need to forward the permission via their wrapper (see the templates above).
 
