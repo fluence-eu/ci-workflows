@@ -57,6 +57,7 @@ jobs:
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
       - name: Verify release was authored by the release bot
+        id: verify
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EXPECTED_BOT: ${{ steps.app-token.outputs.app-slug }}[bot]
@@ -64,9 +65,26 @@ jobs:
           MSG: ${{ github.event.head_commit.message }}
           REPO: ${{ github.repository }}
         run: |
+          # The CHANGELOG.md path filter on the consumer's release.yml
+          # also fires for any feature/chore merge that happens to touch
+          # the file (e.g. retro-cleanup of older entries). Skip cleanly
+          # in that case so the run shows as success rather than a red
+          # "failed verify" — the auth check stays loud for anything
+          # that actually looks like a release commit.
+          case "$MSG" in
+            "release: v"*|*"from "*"/release/v"*)
+              : ;;
+            *)
+              echo "Not a release commit, skipping subsequent steps."
+              echo "is_release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+
           # Squash merge: commit author is the bot directly.
           if [ "$AUTHOR" = "$EXPECTED_BOT" ]; then
             echo "Verified: commit authored by $AUTHOR"
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # Merge commit: extract PR number and check the PR author.
@@ -75,6 +93,7 @@ jobs:
             PR_AUTHOR=$(gh pr view "$PR_NUM" --repo "$REPO" --json author --jq '.author.login')
             if [ "$PR_AUTHOR" = "$EXPECTED_BOT" ]; then
               echo "Verified: PR #${PR_NUM} authored by $PR_AUTHOR"
+              echo "is_release=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             echo "::error::Release PR #${PR_NUM} authored by ${PR_AUTHOR}, expected ${EXPECTED_BOT}"
@@ -84,12 +103,14 @@ jobs:
           exit 1
 
       - uses: actions/checkout@v6
+        if: steps.verify.outputs.is_release == 'true'
         with:
           ref: ${{ inputs.develop_branch }}
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Extract tag from commit message
+        if: steps.verify.outputs.is_release == 'true'
         id: version
         env:
           MSG: ${{ github.event.head_commit.message }}
@@ -102,6 +123,7 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Create tag
+        if: steps.verify.outputs.is_release == 'true'
         env:
           TAG: ${{ steps.version.outputs.tag }}
           BOT_USER: ${{ steps.app-token.outputs.app-slug }}[bot]
@@ -123,6 +145,7 @@ jobs:
           fi
 
       - name: Extract release notes from changelog
+        if: steps.verify.outputs.is_release == 'true'
         env:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
@@ -136,6 +159,7 @@ jobs:
           fi
 
       - name: Create GitHub Release
+        if: steps.verify.outputs.is_release == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
@@ -149,6 +173,7 @@ jobs:
           fi
 
       - name: Mirror released branch
+        if: steps.verify.outputs.is_release == 'true'
         env:
           DEVELOP: ${{ inputs.develop_branch }}
           MAIN: ${{ inputs.main_branch }}
