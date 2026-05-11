@@ -115,4 +115,24 @@ jobs:
             --body "Update changelog for release ${TAG}. Auto-merged once required checks pass." \
             --base "$BASE" \
             --head "$BRANCH")
-          gh pr merge "$PR_URL" --auto --squash --delete-branch
+
+          # GitHub's enablePullRequestAutoMerge mutation refuses while
+          # the PR is in "unstable" status — the freshly created PR's
+          # mergeable state has not yet propagated. Retry briefly to
+          # absorb the propagation lag rather than leaving the PR open
+          # without auto-merge enabled.
+          for attempt in 1 2 3 4 5; do
+            if gh pr merge "$PR_URL" --auto --squash --delete-branch; then
+              exit 0
+            fi
+            echo "auto-merge attempt ${attempt}/5 failed, retrying in 2s..."
+            sleep 2
+          done
+
+          # Auto-merge never took. Close the orphan PR + delete its
+          # branch so the next prepare-release run starts clean and
+          # the PR list does not accumulate stale release/v* entries.
+          echo "auto-merge failed after 5 attempts, closing PR"
+          gh pr close "$PR_URL" --delete-branch \
+            --comment "Auto-close: failed to enable auto-merge after 5 retries. Re-run the Prepare Release PR workflow."
+          exit 1
