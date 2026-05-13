@@ -510,6 +510,15 @@ jobs:
 
 All four entries above are configured at the **`fluence-eu` organisation level** and automatically inherited by every repo in the org — a new consumer in `fluence-eu` does **not** need to copy them into its own Secrets / Variables. Repos outside the org must declare them per-repo.
 
+The credentials are inherited, **but the GitHub Apps themselves must still be installed on each consumer repository** — this step is per-repo. Org Settings → **Installed GitHub Apps** → the relevant app → **Configure** → tick the new repo in the **Repository access** list. Which apps you need depends on what reusables you consume:
+
+| App | Required when the consumer uses… |
+|---|---|
+| `fluence-ci-bot` | any `*-pr.yml` reusable that posts a sticky comment (`ruby-gem-rubocop-pr`, `ruby-gem-coverage-pr`, `ruby-gem-codequality-pr`, `rails-security-pr`, `ruby-gem-docs-pr`, `vue-app-*-pr`, …). Skip if the consumer only runs `*-measure` baselines. |
+| release App | `app-prepare-release.yml` / `app-release.yml` (rolling-release apps) or `ruby-gem-prepare-release.yml` / `ruby-gem-release.yml` (gem releases). Forward `RELEASE_APP_PRIVATE_KEY` to a `*-pr` reusable **only** if the consumer actually has release PRs to skip — the reusables degrade gracefully to always-run when the secret is omitted. |
+
+Without the app install, the runtime call to `actions/create-github-app-token` resolves the app credentials successfully but cannot find an installation for the repo and fails with `HttpError: Not Found - https://docs.github.com/rest/apps/apps#get-a-repository-installation-for-the-authenticated-app` (HTTP 404).
+
 ### Gemfile dependency
 
 PR-side reusables (`ruby-gem-rubocop-pr`, `ruby-gem-coverage-pr`, `ruby-gem-codequality-pr`, `rails-security-pr`, `ruby-gem-docs-pr`) and their `*-measure` counterparts run `bundle install` then invoke `rubocop`, `reek`, `flog`, `flay`, `brakeman`, `bundler-audit`, `ruby_audit`, `yard`, `yardstick`, `simplecov`, `undercover`. The consumer repo must therefore ship those tools in its bundle.
