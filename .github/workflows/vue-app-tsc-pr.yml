@@ -12,11 +12,6 @@ on:
         required: false
         type: string
         default: ''
-      npm_registry_host:
-        description: Forwarded to the nested measure reusable for private npm registry auth.
-        required: false
-        type: string
-        default: ''
       typecheck_command:
         required: false
         type: string
@@ -28,8 +23,9 @@ on:
     secrets:
       FLUENCE_CI_BOT_PRIVATE_KEY: { required: false }
       RELEASE_APP_PRIVATE_KEY: { required: false }
-      NPM_REGISTRY_TOKEN:
-        description: Token paired with `npm_registry_host`, forwarded to the measure reusable.
+      NPMRC_AUTH:
+        description: |
+          Multi-line .npmrc content forwarded to the measure reusable for private npm registry auth. See `vue-app-tsc-measure.yml` for the full format.
         required: false
 
 permissions:
@@ -69,9 +65,8 @@ jobs:
       node_version: ${{ inputs.node_version }}
       pre_install_command: ${{ inputs.pre_install_command }}
       typecheck_command: ${{ inputs.typecheck_command }}
-      npm_registry_host: ${{ inputs.npm_registry_host }}
     secrets:
-      NPM_REGISTRY_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
+      NPMRC_AUTH: ${{ secrets.NPMRC_AUTH }}
 
   comment:
     name: Comment on PR

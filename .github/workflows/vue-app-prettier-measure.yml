@@ -16,12 +16,6 @@ on:
         required: false
         type: string
         default: ''
-      npm_registry_host:
-        description: |
-          Host of a private npm registry to authenticate against (e.g. `npm.fontawesome.com`). When set together with the `NPM_REGISTRY_TOKEN` secret, the runner writes `npm config set "//<host>/:_authToken=$NPM_REGISTRY_TOKEN"` before `npm ci`.
-        required: false
-        type: string
-        default: ''
       format_command:
         description: Shell command running prettier --check. stdout captured to tmp/fluence-report/prettier.txt.
         required: false
@@ -32,8 +26,9 @@ on:
         description: Outcome of the prettier step.
         value: ${{ jobs.measure.outputs.prettier_outcome }}
     secrets:
-      NPM_REGISTRY_TOKEN:
-        description: Token paired with `npm_registry_host` for private npm registry auth.
+      NPMRC_AUTH:
+        description: |
+          Multi-line .npmrc content (one or more `//host/:_authToken=…` lines) appended verbatim to `~/.npmrc` before `npm ci`. Supports any number of private registries.
         required: false
 
 permissions:
@@ -58,12 +53,11 @@ jobs:
         if: inputs.pre_install_command != ''
         run: ${{ inputs.pre_install_command }}
 
-      - name: Configure private npm registry
-        if: inputs.npm_registry_host != ''
+      - name: Configure private npm registries
+        if: env.NPMRC_AUTH != ''
         env:
-          NPM_REGISTRY_HOST: ${{ inputs.npm_registry_host }}
-          NPM_REGISTRY_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
-        run: npm config set "//${NPM_REGISTRY_HOST}/:_authToken=${NPM_REGISTRY_TOKEN}"
+          NPMRC_AUTH: ${{ secrets.NPMRC_AUTH }}
+        run: printf '%s\n' "$NPMRC_AUTH" >> "$HOME/.npmrc"
 
       - run: npm ci
 
