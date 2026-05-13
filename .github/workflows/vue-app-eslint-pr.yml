@@ -107,31 +107,20 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: eslint-base/
 
-      - name: Build sticky-comment body
-        id: body
+      - name: Resolve baseline path
+        id: base
         run: |
-          pr_count=0
-          base_count=0
-          if [ -f eslint-pr/eslint.json ]; then
-            pr_count=$(jq '[.[] | .errorCount] | add // 0' eslint-pr/eslint.json)
-          fi
           if [ -f eslint-base/eslint.json ]; then
-            base_count=$(jq '[.[] | .errorCount] | add // 0' eslint-base/eslint.json)
+            echo "path=eslint-base/eslint.json" >> "$GITHUB_OUTPUT"
           fi
-          delta=$((pr_count - base_count))
-          if [ "$delta" -gt 0 ]; then icon="🔴 +$delta"
-          elif [ "$delta" -lt 0 ]; then icon="🟢 $delta"
-          else icon="—"
-          fi
-          {
-            echo "body<<BODY_EOF"
-            echo "## 🧹 ESLint: $pr_count error(s)"
-            echo
-            echo "| Metric | Base | PR | Δ |"
-            echo "| --- | ---: | ---: | ---: |"
-            echo "| Errors | $base_count | $pr_count | $icon |"
-            echo "BODY_EOF"
-          } >> "$GITHUB_OUTPUT"
+
+      - id: body
+        uses: fluence-eu/ci-workflows/actions/eslint-report@v3
+        with:
+          outcome:   ${{ needs.measure.outputs.eslint_outcome }}
+          base_ref:  origin/${{ github.base_ref }}
+          pr_path:   eslint-pr/eslint.json
+          base_path: ${{ steps.base.outputs.path }}
 
       - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v3
         with:

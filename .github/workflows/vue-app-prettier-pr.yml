@@ -89,27 +89,20 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: prettier-base/
 
-      - name: Build sticky-comment body
-        id: body
+      - name: Resolve baseline path
+        id: base
         run: |
-          pr_count=0
-          base_count=0
-          [ -f prettier-pr/prettier.txt ]   && pr_count=$(grep -cE '^\[warn\] ' prettier-pr/prettier.txt || true)
-          [ -f prettier-base/prettier.txt ] && base_count=$(grep -cE '^\[warn\] ' prettier-base/prettier.txt || true)
-          delta=$((pr_count - base_count))
-          if [ "$delta" -gt 0 ]; then icon="🔴 +$delta"
-          elif [ "$delta" -lt 0 ]; then icon="🟢 $delta"
-          else icon="—"
+          if [ -f prettier-base/prettier.txt ]; then
+            echo "path=prettier-base/prettier.txt" >> "$GITHUB_OUTPUT"
           fi
-          {
-            echo "body<<BODY_EOF"
-            echo "## 💅 Prettier: $pr_count unformatted file(s)"
-            echo
-            echo "| Metric | Base | PR | Δ |"
-            echo "| --- | ---: | ---: | ---: |"
-            echo "| Unformatted | $base_count | $pr_count | $icon |"
-            echo "BODY_EOF"
-          } >> "$GITHUB_OUTPUT"
+
+      - id: body
+        uses: fluence-eu/ci-workflows/actions/prettier-report@v3
+        with:
+          outcome:   ${{ needs.measure.outputs.prettier_outcome }}
+          base_ref:  origin/${{ github.base_ref }}
+          pr_path:   prettier-pr/prettier.txt
+          base_path: ${{ steps.base.outputs.path }}
 
       - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v3
         with:

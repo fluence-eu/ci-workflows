@@ -89,36 +89,20 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: vitest-base/
 
-      - name: Build sticky-comment body
-        id: body
+      - name: Resolve baseline path
+        id: base
         run: |
-          read_metric() { jq -r "$2 // 0" "$1" 2>/dev/null || echo 0; }
-          pr_total=0; pr_failed=0; base_total=0; base_failed=0
-          if [ -f vitest-pr/vitest.json ]; then
-            pr_total=$(read_metric vitest-pr/vitest.json '.numTotalTests')
-            pr_failed=$(read_metric vitest-pr/vitest.json '.numFailedTests')
-          fi
           if [ -f vitest-base/vitest.json ]; then
-            base_total=$(read_metric vitest-base/vitest.json '.numTotalTests')
-            base_failed=$(read_metric vitest-base/vitest.json '.numFailedTests')
+            echo "path=vitest-base/vitest.json" >> "$GITHUB_OUTPUT"
           fi
-          delta=$((pr_failed - base_failed))
-          if [ "$delta" -gt 0 ]; then icon="🔴 +$delta"
-          elif [ "$delta" -lt 0 ]; then icon="🟢 $delta"
-          else icon="—"
-          fi
-          status="✅"
-          [ "$pr_failed" -gt 0 ] && status="❌"
-          {
-            echo "body<<BODY_EOF"
-            echo "## ${status} Vitest: $pr_total test(s), $pr_failed failure(s)"
-            echo
-            echo "| Metric | Base | PR | Δ |"
-            echo "| --- | ---: | ---: | ---: |"
-            echo "| Total tests | $base_total | $pr_total | — |"
-            echo "| Failed | $base_failed | $pr_failed | $icon |"
-            echo "BODY_EOF"
-          } >> "$GITHUB_OUTPUT"
+
+      - id: body
+        uses: fluence-eu/ci-workflows/actions/vitest-report@v3
+        with:
+          outcome:   ${{ needs.measure.outputs.vitest_outcome }}
+          base_ref:  origin/${{ github.base_ref }}
+          pr_path:   vitest-pr/vitest.json
+          base_path: ${{ steps.base.outputs.path }}
 
       - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v3
         with:

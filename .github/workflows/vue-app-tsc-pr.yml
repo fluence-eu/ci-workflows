@@ -89,27 +89,20 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: tsc-base/
 
-      - name: Build sticky-comment body
-        id: body
+      - name: Resolve baseline path
+        id: base
         run: |
-          pr_count=0
-          base_count=0
-          [ -f tsc-pr/tsc.txt ]   && pr_count=$(grep -c 'error TS' tsc-pr/tsc.txt || true)
-          [ -f tsc-base/tsc.txt ] && base_count=$(grep -c 'error TS' tsc-base/tsc.txt || true)
-          delta=$((pr_count - base_count))
-          if [ "$delta" -gt 0 ]; then icon="🔴 +$delta"
-          elif [ "$delta" -lt 0 ]; then icon="🟢 $delta"
-          else icon="—"
+          if [ -f tsc-base/tsc.txt ]; then
+            echo "path=tsc-base/tsc.txt" >> "$GITHUB_OUTPUT"
           fi
-          {
-            echo "body<<BODY_EOF"
-            echo "## 🔷 TypeScript: $pr_count error(s)"
-            echo
-            echo "| Metric | Base | PR | Δ |"
-            echo "| --- | ---: | ---: | ---: |"
-            echo "| Errors | $base_count | $pr_count | $icon |"
-            echo "BODY_EOF"
-          } >> "$GITHUB_OUTPUT"
+
+      - id: body
+        uses: fluence-eu/ci-workflows/actions/tsc-report@v3
+        with:
+          outcome:   ${{ needs.measure.outputs.tsc_outcome }}
+          base_ref:  origin/${{ github.base_ref }}
+          pr_path:   tsc-pr/tsc.txt
+          base_path: ${{ steps.base.outputs.path }}
 
       - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v3
         with:
