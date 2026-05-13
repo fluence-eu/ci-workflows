@@ -1,0 +1,145 @@
+name: Vue App — ESLint PR Check
+
+# Runs on pull requests. Delegates the PR-head measurement to
+# vue-app-eslint-measure.yml (same reusable used by main-push baseline
+# runs — zero duplication of the measure logic). Then fetches the
+# latest baseline from the consumer's eslint-measure.yml run, posts
+# a sticky PR comment with the before/after offense count diff, and
+# fails if eslint exited non-zero on the PR head.
+
+on:
+  workflow_call:
+    inputs:
+      node_version:
+        description: Node version for the runner
+        required: false
+        type: string
+        default: '20'
+      lint_command:
+        description: Forwarded to vue-app-eslint-measure.yml.
+        required: false
+        type: string
+        default: 'npx --no-install eslint . --format json --output-file tmp/fluence-report/eslint.json'
+      measure_workflow_file:
+        description: Consumer workflow filename that uploaded the `eslint-report` artifact on the base branch.
+        required: false
+        type: string
+        default: 'eslint-measure.yml'
+    secrets:
+      FLUENCE_CI_BOT_PRIVATE_KEY:
+        description: Optional GitHub App private key for the sticky PR comment author.
+        required: false
+      RELEASE_APP_PRIVATE_KEY:
+        description: Optional release App key — release PRs (head_ref release/v* authored by the App) skip measure + comment when forwarded.
+        required: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  resolve-bot:
+    name: Resolve release-bot
+    runs-on: ubuntu-latest
+    outputs:
+      skip_release_pr: ${{ steps.check.outputs.skip }}
+    steps:
+      - id: token
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+      - id: check
+        env:
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          SLUG: ${{ steps.token.outputs.app-slug }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [ -n "$SLUG" ] && [ "$AUTHOR" = "${SLUG}[bot]" ] && [[ "$HEAD_REF" == release/v* ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Release PR detected — skipping measure + comment."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  measure:
+    name: Measure
+    needs: resolve-bot
+    if: needs.resolve-bot.outputs.skip_release_pr == 'false'
+    uses: fluence-eu/ci-workflows/.github/workflows/vue-app-eslint-measure.yml@v3
+    with:
+      node_version: ${{ inputs.node_version }}
+      lint_command: ${{ inputs.lint_command }}
+
+  comment:
+    name: Comment on PR
+    needs: [resolve-bot, measure]
+    if: needs.resolve-bot.outputs.skip_release_pr == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download PR eslint report
+        uses: actions/download-artifact@v8
+        with:
+          name: eslint-report
+          path: eslint-pr/
+
+      - name: Find latest base-branch run with eslint report
+        id: base-run
+        uses: fluence-eu/ci-workflows/actions/find-base-run@v3
+        with:
+          workflow_file: ${{ inputs.measure_workflow_file }}
+
+      - name: Download base eslint report
+        if: steps.base-run.outputs.id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: eslint-report
+          run-id: ${{ steps.base-run.outputs.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: eslint-base/
+
+      - name: Build sticky-comment body
+        id: body
+        run: |
+          pr_count=0
+          base_count=0
+          if [ -f eslint-pr/eslint.json ]; then
+            pr_count=$(jq '[.[] | .errorCount] | add // 0' eslint-pr/eslint.json)
+          fi
+          if [ -f eslint-base/eslint.json ]; then
+            base_count=$(jq '[.[] | .errorCount] | add // 0' eslint-base/eslint.json)
+          fi
+          delta=$((pr_count - base_count))
+          if [ "$delta" -gt 0 ]; then icon="🔴 +$delta"
+          elif [ "$delta" -lt 0 ]; then icon="🟢 $delta"
+          else icon="—"
+          fi
+          {
+            echo "body<<BODY_EOF"
+            echo "## 🧹 ESLint: $pr_count error(s)"
+            echo
+            echo "| Metric | Base | PR | Δ |"
+            echo "| --- | ---: | ---: | ---: |"
+            echo "| Errors | $base_count | $pr_count | $icon |"
+            echo "BODY_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v3
+        with:
+          marker:          '<!-- eslint-report -->'
+          body:            ${{ steps.body.outputs.body }}
+          client-id:       ${{ vars.FLUENCE_CI_CLIENT_ID }}
+          app-private-key: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
+
+      - name: Fail if eslint failed
+        run: |
+          [ "${{ needs.measure.outputs.eslint_outcome }}" = "success" ]

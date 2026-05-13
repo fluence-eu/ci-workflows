@@ -1,0 +1,57 @@
+name: Vue App — Vitest Measure
+
+# Runs vitest --reporter=json, uploads the test report as
+# `vitest-report`. Exposes the step's outcome as a job output.
+
+on:
+  workflow_call:
+    inputs:
+      node_version:
+        description: Node version for the runner
+        required: false
+        type: string
+        default: '20'
+      test_command:
+        description: Shell command running vitest with JSON reporter writing to tmp/fluence-report/vitest.json.
+        required: false
+        type: string
+        default: 'npx --no-install vitest run --reporter=json --outputFile=tmp/fluence-report/vitest.json'
+    outputs:
+      vitest_outcome:
+        description: Outcome of the vitest step.
+        value: ${{ jobs.measure.outputs.vitest_outcome }}
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  measure:
+    name: Measure
+    runs-on: ubuntu-latest
+    outputs:
+      vitest_outcome: ${{ steps.vitest.outcome }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Run vitest
+        id: vitest
+        continue-on-error: true
+        run: |
+          mkdir -p tmp/fluence-report
+          ${{ inputs.test_command }}
+
+      - name: Upload vitest report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: vitest-report
+          path: tmp/fluence-report/vitest.json
+          if-no-files-found: warn

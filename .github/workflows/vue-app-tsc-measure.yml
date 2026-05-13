@@ -1,0 +1,58 @@
+name: Vue App — TypeScript Measure
+
+# Runs vue-tsc --noEmit, captures stderr to tsc.txt, and uploads it
+# as `tsc-report`. Exposes the step's outcome as a job output.
+
+on:
+  workflow_call:
+    inputs:
+      node_version:
+        description: Node version for the runner
+        required: false
+        type: string
+        default: '20'
+      typecheck_command:
+        description: Shell command running the typecheck. stderr is captured to tmp/fluence-report/tsc.txt.
+        required: false
+        type: string
+        default: 'npx --no-install vue-tsc --noEmit'
+    outputs:
+      tsc_outcome:
+        description: Outcome of the typecheck step.
+        value: ${{ jobs.measure.outputs.tsc_outcome }}
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  measure:
+    name: Measure
+    runs-on: ubuntu-latest
+    outputs:
+      tsc_outcome: ${{ steps.tsc.outcome }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Run vue-tsc
+        id: tsc
+        continue-on-error: true
+        run: |
+          mkdir -p tmp/fluence-report
+          ${{ inputs.typecheck_command }} 2>&1 | tee tmp/fluence-report/tsc.txt
+          exit ${PIPESTATUS[0]}
+
+      - name: Upload tsc report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: tsc-report
+          path: tmp/fluence-report/tsc.txt
+          if-no-files-found: warn

@@ -1,0 +1,58 @@
+name: Vue App — Prettier Measure
+
+# Runs prettier --check, captures stdout (the list of unformatted
+# files) to prettier.txt, and uploads it as `prettier-report`.
+
+on:
+  workflow_call:
+    inputs:
+      node_version:
+        description: Node version for the runner
+        required: false
+        type: string
+        default: '20'
+      format_command:
+        description: Shell command running prettier --check. stdout captured to tmp/fluence-report/prettier.txt.
+        required: false
+        type: string
+        default: 'npx --no-install prettier --check .'
+    outputs:
+      prettier_outcome:
+        description: Outcome of the prettier step.
+        value: ${{ jobs.measure.outputs.prettier_outcome }}
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  measure:
+    name: Measure
+    runs-on: ubuntu-latest
+    outputs:
+      prettier_outcome: ${{ steps.prettier.outcome }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Run prettier
+        id: prettier
+        continue-on-error: true
+        run: |
+          mkdir -p tmp/fluence-report
+          ${{ inputs.format_command }} 2>&1 | tee tmp/fluence-report/prettier.txt
+          exit ${PIPESTATUS[0]}
+
+      - name: Upload prettier report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: prettier-report
+          path: tmp/fluence-report/prettier.txt
+          if-no-files-found: warn

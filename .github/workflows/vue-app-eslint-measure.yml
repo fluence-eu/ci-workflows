@@ -1,0 +1,63 @@
+name: Vue App — ESLint Measure
+
+# Runs eslint with --format json and uploads the offense report as
+# `eslint-report`. Exposes the eslint step's outcome as a job output.
+#
+# Called from two places:
+# - the consumer's `eslint-measure.yml` on push to the default branch,
+#   to produce the baseline artifact used by vue-app-eslint-pr.yml,
+# - vue-app-eslint-pr.yml on pull_request, to measure the PR head
+#   (no duplication: same reusable, same behaviour).
+
+on:
+  workflow_call:
+    inputs:
+      node_version:
+        description: Node version for the runner
+        required: false
+        type: string
+        default: '20'
+      lint_command:
+        description: Shell command invoking eslint with --format json --output-file tmp/fluence-report/eslint.json
+        required: false
+        type: string
+        default: 'npx --no-install eslint . --format json --output-file tmp/fluence-report/eslint.json'
+    outputs:
+      eslint_outcome:
+        description: Outcome of `eslint` (`success` / `failure`).
+        value: ${{ jobs.measure.outputs.eslint_outcome }}
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  measure:
+    name: Measure
+    runs-on: ubuntu-latest
+    outputs:
+      eslint_outcome: ${{ steps.eslint.outcome }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Run eslint
+        id: eslint
+        continue-on-error: true
+        run: |
+          mkdir -p tmp/fluence-report
+          ${{ inputs.lint_command }}
+
+      - name: Upload eslint report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: eslint-report
+          path: tmp/fluence-report/eslint.json
+          if-no-files-found: warn
