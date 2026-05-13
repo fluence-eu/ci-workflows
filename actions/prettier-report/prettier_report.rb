@@ -10,6 +10,12 @@ base_ref         = ARGV[1] || 'origin/develop'
 pr_report_path   = ARGV[2]
 base_report_path = ARGV[3]
 
+# Prettier sometimes emits ANSI color escapes even when piped through
+# tee (false TTY detection), producing lines like
+# `\e[33m[warn]\e[39m path/file` instead of `[warn] path/file`. Strip
+# the escapes before matching so the parser doesn't silently count
+# zero offences while the run report shows nine.
+ANSI_ESCAPE = /\e\[[\d;]*[a-zA-Z]/
 WARN_LINE = /^\[warn\]\s+(.+)$/
 
 def parse_prettier(path)
@@ -17,7 +23,8 @@ def parse_prettier(path)
 
   files = []
   File.foreach(path) do |line|
-    if (m = line.chomp.match(WARN_LINE))
+    clean = line.chomp.gsub(ANSI_ESCAPE, '')
+    if (m = clean.match(WARN_LINE))
       raw = m[1]
       # Skip prettier's own summary lines.
       next if raw.start_with?('Code style issues')
