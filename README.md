@@ -1,14 +1,15 @@
 # ci-workflows
 
-Reusable GitHub Actions workflows shared across [fluence-eu](https://github.com/fluence-eu) Ruby projects — **gems** (semver release + packages push) and **apps** (rolling release + main mirror).
+Reusable GitHub Actions workflows shared across [fluence-eu](https://github.com/fluence-eu) projects — **gems** (semver release + packages push), **Rails apps** (rolling release + main mirror), and **Vue / Node frontends** (quality gates with sticky-comment diff).
 
 Workflow families:
 
 | Prefix | Pattern | Used by |
 |---|---|---|
-| `ruby-gem-*` | Semver bump, `.gemspec` build, attach to GitHub Release, push to GitHub Packages | `fluence-gateway-client`, `fluence-gateway-auth`, `mosaic-sdk` |
-| `app-*` | Timestamp tag, git-cliff changelog auto-merged on `develop`, force-push mirror to `main` | `gateway` |
-| `rails-*` | Rails-app-specific checks (brakeman, bundler-audit, etc.) | `gateway` |
+| `ruby-gem-*` | Semver bump, `.gemspec` build, attach to GitHub Release, push to GitHub Packages — plus the shared Ruby quality gates (rubocop, codequality, coverage, docs) that any Ruby consumer wires up | `fluence-gateway-client`, `fluence-gateway-auth`, `mosaic-sdk` (release flow) + `gateway`, `ledger` (quality gates only) |
+| `app-*` | Timestamp tag, git-cliff changelog auto-merged on the working branch, force-push mirror to `main` | `gateway`, `ledger` |
+| `rails-*` | Rails-app-specific checks (brakeman, bundler-audit, ruby-audit) | `gateway`, `ledger` |
+| `vue-app-*` | Vue / Node frontend gates (`vue-tsc`, `eslint`, `prettier`, `vitest`) with sticky-comment diff vs baseline | `vision-front` |
 | `claude-*` | Language-agnostic AI gates backed by `anthropics/claude-code-action` against a Pro/Max OAuth token | (any consumer) |
 
 For contributor guidelines and design principles, see [CONTRIBUTING.md](./CONTRIBUTING.md).
