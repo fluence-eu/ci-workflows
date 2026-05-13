@@ -17,6 +17,11 @@ on:
         required: false
         type: string
         default: '20'
+      pre_install_command:
+        description: Optional shell command run between setup-node and npm ci (e.g. to configure a private npm registry).
+        required: false
+        type: string
+        default: ''
       lint_command:
         description: Shell command invoking eslint with --format json --output-file tmp/fluence-report/eslint.json
         required: false
@@ -44,6 +49,10 @@ jobs:
         with:
           node-version: ${{ inputs.node_version }}
           cache: 'npm'
+
+      - name: Pre-install setup
+        if: inputs.pre_install_command != ''
+        run: ${{ inputs.pre_install_command }}
 
       - run: npm ci
 
