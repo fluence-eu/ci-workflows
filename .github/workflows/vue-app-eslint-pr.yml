@@ -20,6 +20,11 @@ on:
         required: false
         type: string
         default: ''
+      npm_registry_host:
+        description: Forwarded to the nested measure reusable for private npm registry auth.
+        required: false
+        type: string
+        default: ''
       lint_command:
         description: Forwarded to vue-app-eslint-measure.yml.
         required: false
@@ -36,6 +41,9 @@ on:
         required: false
       RELEASE_APP_PRIVATE_KEY:
         description: Optional release App key — release PRs (head_ref release/v* authored by the App) skip measure + comment when forwarded.
+        required: false
+      NPM_REGISTRY_TOKEN:
+        description: Token paired with `npm_registry_host`, forwarded to the measure reusable.
         required: false
 
 permissions:
@@ -76,6 +84,9 @@ jobs:
       node_version: ${{ inputs.node_version }}
       pre_install_command: ${{ inputs.pre_install_command }}
       lint_command: ${{ inputs.lint_command }}
+      npm_registry_host: ${{ inputs.npm_registry_host }}
+    secrets:
+      NPM_REGISTRY_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
 
   comment:
     name: Comment on PR

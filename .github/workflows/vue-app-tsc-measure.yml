@@ -16,6 +16,12 @@ on:
         required: false
         type: string
         default: ''
+      npm_registry_host:
+        description: |
+          Host of a private npm registry to authenticate against (e.g. `npm.fontawesome.com`). When set together with the `NPM_REGISTRY_TOKEN` secret, the runner writes `npm config set "//<host>/:_authToken=$NPM_REGISTRY_TOKEN"` before `npm ci`.
+        required: false
+        type: string
+        default: ''
       typecheck_command:
         description: Shell command running the typecheck. stderr is captured to tmp/fluence-report/tsc.txt.
         required: false
@@ -25,6 +31,10 @@ on:
       tsc_outcome:
         description: Outcome of the typecheck step.
         value: ${{ jobs.measure.outputs.tsc_outcome }}
+    secrets:
+      NPM_REGISTRY_TOKEN:
+        description: Token paired with `npm_registry_host` for private npm registry auth.
+        required: false
 
 permissions:
   contents: read
@@ -47,6 +57,13 @@ jobs:
       - name: Pre-install setup
         if: inputs.pre_install_command != ''
         run: ${{ inputs.pre_install_command }}
+
+      - name: Configure private npm registry
+        if: inputs.npm_registry_host != ''
+        env:
+          NPM_REGISTRY_HOST: ${{ inputs.npm_registry_host }}
+          NPM_REGISTRY_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
+        run: npm config set "//${NPM_REGISTRY_HOST}/:_authToken=${NPM_REGISTRY_TOKEN}"
 
       - run: npm ci
 
