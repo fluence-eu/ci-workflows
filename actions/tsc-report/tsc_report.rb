@@ -12,7 +12,11 @@ base_report_path = ARGV[3]
 ERROR_LINE = /^(.+?)\((\d+),(\d+)\):\s+error\s+(TS\d+):\s+(.+)$/
 
 def parse_tsc(path)
-  return nil unless path && !path.empty? && File.exist?(path) && !File.empty?(path)
+  return nil unless path && !path.empty? && File.exist?(path)
+
+  # Empty file = vue-tsc emitted no output = zero type errors.
+  # Treat it as a successful run with 0 errors rather than "missing report".
+  return { files: {}, total: 0 } if File.empty?(path)
 
   files = {}
   File.foreach(path) do |line|
