@@ -11,6 +11,11 @@ on:
         required: false
         type: string
         default: '20'
+      pre_install_command:
+        description: Optional shell command run between setup-node and npm ci (e.g. to configure a private npm registry).
+        required: false
+        type: string
+        default: ''
       test_command:
         description: Shell command running vitest with JSON reporter writing to tmp/fluence-report/vitest.json.
         required: false
@@ -38,6 +43,10 @@ jobs:
         with:
           node-version: ${{ inputs.node_version }}
           cache: 'npm'
+
+      - name: Pre-install setup
+        if: inputs.pre_install_command != ''
+        run: ${{ inputs.pre_install_command }}
 
       - run: npm ci
 

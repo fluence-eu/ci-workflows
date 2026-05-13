@@ -7,6 +7,11 @@ on:
         required: false
         type: string
         default: '20'
+      pre_install_command:
+        description: Optional shell command run between setup-node and npm ci (e.g. to configure a private npm registry). Forwarded to the nested measure reusable.
+        required: false
+        type: string
+        default: ''
       format_command:
         required: false
         type: string
@@ -54,6 +59,7 @@ jobs:
     uses: fluence-eu/ci-workflows/.github/workflows/vue-app-prettier-measure.yml@v3
     with:
       node_version: ${{ inputs.node_version }}
+      pre_install_command: ${{ inputs.pre_install_command }}
       format_command: ${{ inputs.format_command }}
 
   comment:
