@@ -37,6 +37,10 @@ on:
       RELEASE_APP_PRIVATE_KEY:
         description: Optional release App key — release PRs (head_ref release/v* authored by the App) skip measure + comment when forwarded.
         required: false
+      NPMRC_AUTH:
+        description: |
+          Multi-line .npmrc content forwarded to the measure reusable for private npm registry auth. See `vue-app-eslint-measure.yml` for the full format.
+        required: false
 
 permissions:
   contents: read
@@ -76,6 +80,8 @@ jobs:
       node_version: ${{ inputs.node_version }}
       pre_install_command: ${{ inputs.pre_install_command }}
       lint_command: ${{ inputs.lint_command }}
+    secrets:
+      NPMRC_AUTH: ${{ secrets.NPMRC_AUTH }}
 
   comment:
     name: Comment on PR

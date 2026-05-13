@@ -25,6 +25,11 @@ on:
       prettier_outcome:
         description: Outcome of the prettier step.
         value: ${{ jobs.measure.outputs.prettier_outcome }}
+    secrets:
+      NPMRC_AUTH:
+        description: |
+          Multi-line .npmrc content (one or more `//host/:_authToken=…` lines) appended verbatim to `~/.npmrc` before `npm ci`. Supports any number of private registries.
+        required: false
 
 permissions:
   contents: read
@@ -47,6 +52,12 @@ jobs:
       - name: Pre-install setup
         if: inputs.pre_install_command != ''
         run: ${{ inputs.pre_install_command }}
+
+      - name: Configure private npm registries
+        if: env.NPMRC_AUTH != ''
+        env:
+          NPMRC_AUTH: ${{ secrets.NPMRC_AUTH }}
+        run: printf '%s\n' "$NPMRC_AUTH" >> "$HOME/.npmrc"
 
       - run: npm ci
 

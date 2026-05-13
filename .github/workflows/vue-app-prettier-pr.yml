@@ -23,6 +23,10 @@ on:
     secrets:
       FLUENCE_CI_BOT_PRIVATE_KEY: { required: false }
       RELEASE_APP_PRIVATE_KEY: { required: false }
+      NPMRC_AUTH:
+        description: |
+          Multi-line .npmrc content forwarded to the measure reusable for private npm registry auth. See `vue-app-prettier-measure.yml` for the full format.
+        required: false
 
 permissions:
   contents: read
@@ -61,6 +65,8 @@ jobs:
       node_version: ${{ inputs.node_version }}
       pre_install_command: ${{ inputs.pre_install_command }}
       format_command: ${{ inputs.format_command }}
+    secrets:
+      NPMRC_AUTH: ${{ secrets.NPMRC_AUTH }}
 
   comment:
     name: Comment on PR
