@@ -168,5 +168,5 @@ jobs:
         with:
           marker:          '<!-- codequality-report -->'
           body:            ${{ steps.body.outputs.body }}
-          client-id:       ${{ vars.FLUENCE_CI_CLIENT_ID }}
+          client-id:       ${{ vars.FLUENCE_CI_BOT_CLIENT_ID }}
           app-private-key: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}

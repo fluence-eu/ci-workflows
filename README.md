@@ -502,7 +502,7 @@ jobs:
 |---|---|---|
 | var | `FLUENCE_RELEASE_BOT_CLIENT_ID` | `ruby-gem-prepare-release.yml`, `app-prepare-release.yml`, `app-release.yml`, all `*-pr.yml` reusables (skip-on-release-PR detection) |
 | secret | `FLUENCE_RELEASE_BOT_PRIVATE_KEY` | same |
-| var | `FLUENCE_CI_CLIENT_ID` | `*-pr.yml` reusables (sticky-comment author) |
+| var | `FLUENCE_CI_BOT_CLIENT_ID` | `*-pr.yml` reusables (sticky-comment author) |
 | secret | `FLUENCE_CI_BOT_PRIVATE_KEY` | same |
 
 `GITHUB_TOKEN` is auto-provided by Actions — never declared in `secrets:`.
