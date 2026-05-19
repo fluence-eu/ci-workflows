@@ -49,7 +49,7 @@ Most gates are **strict** — the PR fails when findings are introduced. The cod
 
 ### AI review (Claude)
 
-Language-agnostic. Auth flows through `CLAUDE_CODE_OAUTH_TOKEN` (generated locally via `claude setup-token`), so runs bill against a Claude Pro/Max subscription instead of metered API credits. Release PRs (head_ref `release/v*` authored by the release App) are skipped when `RELEASE_APP_PRIVATE_KEY` is forwarded.
+Language-agnostic. Auth flows through `CLAUDE_CODE_OAUTH_TOKEN` (generated locally via `claude setup-token`), so runs bill against a Claude Pro/Max subscription instead of metered API credits. Release PRs (head_ref `release/v*` authored by the release App) are skipped when `FLUENCE_RELEASE_BOT_PRIVATE_KEY` is forwarded.
 
 | Central workflow | Consumer file | Trigger | Mode | Role |
 |---|---|---|---|---|
@@ -72,7 +72,7 @@ jobs:
     uses: fluence-eu/ci-workflows/.github/workflows/claude-review-pr.yml@v3
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-      RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}  # optional — skips release PRs
+      FLUENCE_RELEASE_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}  # optional — skips release PRs
 ```
 
 ### Docs deploy
@@ -188,7 +188,7 @@ jobs:
       bump: ${{ inputs.bump }}
       # ruby_version: '3.2'                 # optional, default '4.0'
     secrets:
-      RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+      FLUENCE_RELEASE_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
     permissions:
       contents: read
       packages: read
@@ -215,7 +215,7 @@ jobs:
       # Forwarded so `gh release create` runs with the App's installation
       # token. App-issued release events trigger downstream `publish.yml` —
       # `secrets.GITHUB_TOKEN` does not (GitHub anti-loop rule).
-      RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+      FLUENCE_RELEASE_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
     permissions:
       contents: write
       packages: read
@@ -258,7 +258,7 @@ jobs:
   prepare:
     uses: fluence-eu/ci-workflows/.github/workflows/app-prepare-release.yml@v3
     secrets:
-      RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+      FLUENCE_RELEASE_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
     permissions:
       contents: read
       packages: read
@@ -280,7 +280,7 @@ jobs:
   release:
     uses: fluence-eu/ci-workflows/.github/workflows/app-release.yml@v3
     secrets:
-      RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+      FLUENCE_RELEASE_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
     permissions:
       contents: write
       packages: read
@@ -339,7 +339,7 @@ jobs:
     uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-pr.yml@v3
     secrets:
       FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
-      RELEASE_APP_PRIVATE_KEY:    ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+      FLUENCE_RELEASE_BOT_PRIVATE_KEY:    ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
     permissions:
       contents: read
       pull-requests: write
@@ -378,7 +378,7 @@ jobs:
     #   exclude_files: 'lib/my/gem/version.rb'  # undercover --exclude-files glob
     secrets:
       FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
-      RELEASE_APP_PRIVATE_KEY:    ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+      FLUENCE_RELEASE_BOT_PRIVATE_KEY:    ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
     permissions:
       contents: read
       pull-requests: write
@@ -412,7 +412,7 @@ jobs:
     uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-rubocop-pr.yml@v3
     secrets:
       FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
-      RELEASE_APP_PRIVATE_KEY:    ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+      FLUENCE_RELEASE_BOT_PRIVATE_KEY:    ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
     permissions:
       contents: read
       pull-requests: write
@@ -450,7 +450,7 @@ jobs:
       paths: 'app lib'
     secrets:
       FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
-      RELEASE_APP_PRIVATE_KEY:    ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+      FLUENCE_RELEASE_BOT_PRIVATE_KEY:    ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
     permissions:
       contents: read
       pull-requests: write
@@ -484,7 +484,7 @@ jobs:
     uses: fluence-eu/ci-workflows/.github/workflows/rails-security-pr.yml@v3
     secrets:
       FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
-      RELEASE_APP_PRIVATE_KEY:    ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+      FLUENCE_RELEASE_BOT_PRIVATE_KEY:    ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
     permissions:
       contents: read
       pull-requests: write
@@ -500,9 +500,9 @@ jobs:
 
 | Kind | Name | Used by |
 |---|---|---|
-| var | `RELEASE_CLIENT_ID` | `ruby-gem-prepare-release.yml`, `app-prepare-release.yml`, `app-release.yml`, all `*-pr.yml` reusables (skip-on-release-PR detection) |
-| secret | `RELEASE_APP_PRIVATE_KEY` | same |
-| var | `FLUENCE_CI_CLIENT_ID` | `*-pr.yml` reusables (sticky-comment author) |
+| var | `FLUENCE_RELEASE_BOT_CLIENT_ID` | `ruby-gem-prepare-release.yml`, `app-prepare-release.yml`, `app-release.yml`, all `*-pr.yml` reusables (skip-on-release-PR detection) |
+| secret | `FLUENCE_RELEASE_BOT_PRIVATE_KEY` | same |
+| var | `FLUENCE_CI_BOT_CLIENT_ID` | `*-pr.yml` reusables (sticky-comment author) |
 | secret | `FLUENCE_CI_BOT_PRIVATE_KEY` | same |
 
 `GITHUB_TOKEN` is auto-provided by Actions — never declared in `secrets:`.
@@ -516,7 +516,7 @@ The credentials are inherited, **but the GitHub Apps themselves must still be in
 | App | Required when the consumer uses… |
 |---|---|
 | `fluence-ci-bot` | any `*-pr.yml` reusable that posts a sticky comment (`ruby-gem-rubocop-pr`, `ruby-gem-coverage-pr`, `ruby-gem-codequality-pr`, `rails-security-pr`, `ruby-gem-docs-pr`, `vue-app-*-pr`, …). Skip if the consumer only runs `*-measure` baselines. |
-| release App | `app-prepare-release.yml` / `app-release.yml` (rolling-release apps) or `ruby-gem-prepare-release.yml` / `ruby-gem-release.yml` (gem releases). Forward `RELEASE_APP_PRIVATE_KEY` to a `*-pr` reusable **only** if the consumer actually has release PRs to skip — the reusables degrade gracefully to always-run when the secret is omitted. |
+| release App | `app-prepare-release.yml` / `app-release.yml` (rolling-release apps) or `ruby-gem-prepare-release.yml` / `ruby-gem-release.yml` (gem releases). Forward `FLUENCE_RELEASE_BOT_PRIVATE_KEY` to a `*-pr` reusable **only** if the consumer actually has release PRs to skip — the reusables degrade gracefully to always-run when the secret is omitted. |
 
 Without the app install, the runtime call to `actions/create-github-app-token` resolves the app credentials successfully but cannot find an installation for the repo and fails with `HttpError: Not Found - https://docs.github.com/rest/apps/apps#get-a-repository-installation-for-the-authenticated-app` (HTTP 404).
 

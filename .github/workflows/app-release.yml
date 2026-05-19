@@ -31,7 +31,7 @@ on:
         type: string
         default: 'main'
     secrets:
-      RELEASE_APP_PRIVATE_KEY:
+      FLUENCE_RELEASE_BOT_PRIVATE_KEY:
         description: Private key of the GitHub App used to verify the release author and push the main mirror.
         required: true
 
@@ -53,8 +53,8 @@ jobs:
       - id: app-token
         uses: fluence-eu/ci-workflows/actions/release-app-token@v3
         with:
-          client-id: ${{ vars.RELEASE_CLIENT_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
 
       - name: Verify release was authored by the release bot
         id: verify

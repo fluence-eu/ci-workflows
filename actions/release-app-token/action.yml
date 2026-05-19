@@ -8,8 +8,8 @@ description: |
   per the GitHub Actions context-availability rules, neither `vars`
   nor `secrets` are accessible inside a composite action. Callers
   forward them via the `with:` block:
-    client-id   -> vars.RELEASE_CLIENT_ID
-    private-key -> secrets.RELEASE_APP_PRIVATE_KEY
+    client-id   -> vars.FLUENCE_RELEASE_BOT_CLIENT_ID
+    private-key -> secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY
 
   When `private-key` is empty (e.g. a consumer that hasn't opted in
   yet), the token-generation step is skipped and the outputs resolve
@@ -18,10 +18,10 @@ description: |
 
 inputs:
   client-id:
-    description: GitHub App Client ID. Pass via `vars.RELEASE_CLIENT_ID` from the calling workflow.
+    description: GitHub App Client ID. Pass via `vars.FLUENCE_RELEASE_BOT_CLIENT_ID` from the calling workflow.
     required: true
   private-key:
-    description: GitHub App private key (PEM). Pass via `secrets.RELEASE_APP_PRIVATE_KEY`. When empty the action no-ops and outputs are empty.
+    description: GitHub App private key (PEM). Pass via `secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY`. When empty the action no-ops and outputs are empty.
     required: false
     default: ''
 
