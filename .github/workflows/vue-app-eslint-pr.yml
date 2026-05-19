@@ -34,7 +34,7 @@ on:
       FLUENCE_CI_BOT_PRIVATE_KEY:
         description: Optional GitHub App private key for the sticky PR comment author.
         required: false
-      RELEASE_APP_PRIVATE_KEY:
+      FLUENCE_RELEASE_BOT_PRIVATE_KEY:
         description: Optional release App key — release PRs (head_ref release/v* authored by the App) skip measure + comment when forwarded.
         required: false
       NPMRC_AUTH:
@@ -56,8 +56,8 @@ jobs:
       - id: token
         uses: fluence-eu/ci-workflows/actions/release-app-token@v3
         with:
-          client-id: ${{ vars.RELEASE_CLIENT_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
       - id: check
         env:
           AUTHOR: ${{ github.event.pull_request.user.login }}

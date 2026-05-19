@@ -22,7 +22,7 @@ on:
         default: 'prettier-measure.yml'
     secrets:
       FLUENCE_CI_BOT_PRIVATE_KEY: { required: false }
-      RELEASE_APP_PRIVATE_KEY: { required: false }
+      FLUENCE_RELEASE_BOT_PRIVATE_KEY: { required: false }
       NPMRC_AUTH:
         description: |
           Multi-line .npmrc content forwarded to the measure reusable for private npm registry auth. See `vue-app-prettier-measure.yml` for the full format.
@@ -42,8 +42,8 @@ jobs:
       - id: token
         uses: fluence-eu/ci-workflows/actions/release-app-token@v3
         with:
-          client-id: ${{ vars.RELEASE_CLIENT_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
       - id: check
         env:
           AUTHOR: ${{ github.event.pull_request.user.login }}

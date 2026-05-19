@@ -78,7 +78,7 @@ on:
           metered API credits — make sure no `ANTHROPIC_API_KEY` is also
           forwarded to the runner, otherwise it takes precedence.
         required: true
-      RELEASE_APP_PRIVATE_KEY:
+      FLUENCE_RELEASE_BOT_PRIVATE_KEY:
         description: |
           Optional release App private key. When forwarded, release PRs
           (head_ref `release/v*` authored by the App) skip the review job —
@@ -99,8 +99,8 @@ jobs:
       - id: token
         uses: fluence-eu/ci-workflows/actions/release-app-token@v3
         with:
-          client-id: ${{ vars.RELEASE_CLIENT_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
       - id: check
         env:
           AUTHOR: ${{ github.event.pull_request.user.login }}
@@ -109,7 +109,7 @@ jobs:
         run: |
           # Skip when both conditions hold: PR author is the release App
           # AND head ref starts with `release/v`. SLUG is empty when the
-          # consumer didn't forward RELEASE_APP_PRIVATE_KEY — the empty
+          # consumer didn't forward FLUENCE_RELEASE_BOT_PRIVATE_KEY — the empty
           # match makes skip false, preserving the always-run behaviour.
           if [ -n "$SLUG" ] && [ "$AUTHOR" = "${SLUG}[bot]" ] && [[ "$HEAD_REF" == release/v* ]]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
