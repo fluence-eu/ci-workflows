@@ -1,0 +1,105 @@
+name: Bump npm package versions
+description: |
+  Computes the next version (patch|minor|major) from the current shared
+  version of one or more `package.json` files, then writes it back.
+  Verifies that every listed package is on the same starting version
+  before bumping — multi-package releases under a single tag require
+  synced versions.
+
+  Optional `cross-pin-dependency`: when set to a package name, that
+  dependency is also pinned to the new version in every `package.json`
+  that declares it (handles tightly-coupled monorepo siblings, e.g. a
+  UI package importing an `@internal` API from another package in the
+  same repo).
+
+  Consumed by `npm-prepare-release.yml` reusable workflow. Symmetric
+  with `actions/bump-ruby-gem-versions` for the `ruby-gem-*` family.
+
+inputs:
+  bump:
+    description: "Version bump type (patch|minor|major)"
+    required: true
+  package-paths:
+    description: "Newline-separated list of package.json paths."
+    required: true
+  cross-pin-dependency:
+    description: "Optional npm package name to pin to the new version in every package_paths entry that declares it. Empty = no cross-pin."
+    required: false
+    default: ""
+
+outputs:
+  version:
+    description: "The new version (semver, no v prefix)."
+    value: ${{ steps.bump.outputs.version }}
+  tag:
+    description: "The new tag (v-prefixed semver)."
+    value: ${{ steps.bump.outputs.tag }}
+
+runs:
+  using: composite
+  steps:
+    - id: bump
+      shell: bash
+      env:
+        BUMP: ${{ inputs.bump }}
+        PACKAGE_PATHS: ${{ inputs.package-paths }}
+        CROSS_PIN: ${{ inputs.cross-pin-dependency }}
+      run: |
+        set -euo pipefail
+
+        # First pass: parse package_paths, verify every current version
+        # is identical (a multi-package release would be ambiguous
+        # otherwise).
+        declare -a PKGS=()
+        REFERENCE=""
+        while IFS= read -r pkg; do
+          pkg="$(echo "$pkg" | xargs)"  # trim
+          [ -z "$pkg" ] && continue
+          if [ ! -f "$pkg" ]; then
+            echo "::error::package.json not found at: $pkg"
+            exit 1
+          fi
+          CURRENT=$(node -p "require('./$pkg').version")
+          if [ -z "$REFERENCE" ]; then
+            REFERENCE="$CURRENT"
+          elif [ "$CURRENT" != "$REFERENCE" ]; then
+            echo "::error::Version mismatch: ${pkg} = ${CURRENT}, expected ${REFERENCE}. Multi-package releases require synced versions."
+            exit 1
+          fi
+          PKGS+=("$pkg")
+        done <<< "$PACKAGE_PATHS"
+
+        if [ "${#PKGS[@]}" -eq 0 ]; then
+          echo "::error::No package_paths provided."
+          exit 1
+        fi
+
+        # Compute the new version from the shared current.
+        IFS='.' read -r MAJOR MINOR PATCH <<< "$REFERENCE"
+        case "$BUMP" in
+          patch) PATCH=$((PATCH + 1)) ;;
+          minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+          major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+          *) echo "::error::Invalid bump type '$BUMP'. Use patch, minor, or major." ; exit 1 ;;
+        esac
+        NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+        echo "Bumping ${#PKGS[@]} package(s) from ${REFERENCE} → ${NEW_VERSION}"
+
+        # Second pass: write the new version (and optional cross-pin).
+        for pkg in "${PKGS[@]}"; do
+          node -e "
+            const fs = require('fs');
+            const path = process.argv[1];
+            const version = process.argv[2];
+            const crossPin = process.argv[3];
+            const json = JSON.parse(fs.readFileSync(path, 'utf-8'));
+            json.version = version;
+            if (crossPin && json.dependencies && json.dependencies[crossPin]) {
+              json.dependencies[crossPin] = version;
+            }
+            fs.writeFileSync(path, JSON.stringify(json, null, 2) + '\n');
+          " "$pkg" "$NEW_VERSION" "$CROSS_PIN"
+        done
+
+        echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+        echo "tag=v${NEW_VERSION}" >> "$GITHUB_OUTPUT"

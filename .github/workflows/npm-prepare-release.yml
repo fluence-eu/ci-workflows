@@ -83,71 +83,12 @@ jobs:
         with:
           node-version: ${{ inputs.node_version }}
 
-      - name: Bump version across all packages (in sync)
-        id: bump
-        env:
-          BUMP: ${{ inputs.bump }}
-          PACKAGE_PATHS: ${{ inputs.package_paths }}
-          CROSS_PIN: ${{ inputs.cross_pin_dependency }}
-        run: |
-          set -euo pipefail
-
-          # First pass: parse package_paths, verify every current version
-          # is identical (a multi-package release would be ambiguous
-          # otherwise).
-          declare -a PKGS=()
-          REFERENCE=""
-          while IFS= read -r pkg; do
-            pkg="$(echo "$pkg" | xargs)"  # trim
-            [ -z "$pkg" ] && continue
-            if [ ! -f "$pkg" ]; then
-              echo "::error::package.json not found at: $pkg"
-              exit 1
-            fi
-            CURRENT=$(node -p "require('./$pkg').version")
-            if [ -z "$REFERENCE" ]; then
-              REFERENCE="$CURRENT"
-            elif [ "$CURRENT" != "$REFERENCE" ]; then
-              echo "::error::Version mismatch: ${pkg} = ${CURRENT}, expected ${REFERENCE}. Multi-package releases require synced versions."
-              exit 1
-            fi
-            PKGS+=("$pkg")
-          done <<< "$PACKAGE_PATHS"
-
-          if [ "${#PKGS[@]}" -eq 0 ]; then
-            echo "::error::No package_paths provided."
-            exit 1
-          fi
-
-          # Compute the new version from the shared current.
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$REFERENCE"
-          case "$BUMP" in
-            patch) PATCH=$((PATCH + 1)) ;;
-            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
-            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-            *) echo "::error::Invalid bump type '$BUMP'. Use patch, minor, or major." ; exit 1 ;;
-          esac
-          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
-          echo "Bumping ${#PKGS[@]} package(s) from ${REFERENCE} → ${NEW_VERSION}"
-
-          # Second pass: write the new version (and optional cross-pin).
-          for pkg in "${PKGS[@]}"; do
-            node -e "
-              const fs = require('fs');
-              const path = process.argv[1];
-              const version = process.argv[2];
-              const crossPin = process.argv[3];
-              const json = JSON.parse(fs.readFileSync(path, 'utf-8'));
-              json.version = version;
-              if (crossPin && json.dependencies && json.dependencies[crossPin]) {
-                json.dependencies[crossPin] = version;
-              }
-              fs.writeFileSync(path, JSON.stringify(json, null, 2) + '\n');
-            " "$pkg" "$NEW_VERSION" "$CROSS_PIN"
-          done
-
-          echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag=v${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+      - id: bump
+        uses: fluence-eu/ci-workflows/actions/bump-npm-package-versions@v5
+        with:
+          bump: ${{ inputs.bump }}
+          package-paths: ${{ inputs.package_paths }}
+          cross-pin-dependency: ${{ inputs.cross_pin_dependency }}
 
       - name: Refresh package-lock.json
         run: npm install --package-lock-only
