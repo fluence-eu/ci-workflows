@@ -6,10 +6,11 @@ Workflow families:
 
 | Prefix | Pattern | Used by |
 |---|---|---|
-| `ruby-gem-*` | Semver bump, `.gemspec` build, attach to GitHub Release, push to GitHub Packages — plus the shared Ruby quality gates (rubocop, codequality, coverage, docs) that any Ruby consumer wires up | `fluence-gateway-client`, `fluence-gateway-auth`, `fluence-ci-tools`, `mosaic-sdk` (release flow) + `gateway`, `ledger` (quality gates only) |
-| `app-*` | Timestamp tag, git-cliff changelog auto-merged on the working branch, force-push mirror to `main` | `gateway`, `ledger` |
-| `rails-*` | Rails-app-specific checks (brakeman, bundler-audit, ruby-audit) | `gateway`, `ledger` |
-| `vue-app-*` | Vue / Node frontend gates (`vue-tsc`, `eslint`, `prettier`, `vitest`) with sticky-comment diff vs baseline | `vision-front` |
+| `ruby-gem-*` | Semver bump, `.gemspec` build, attach to GitHub Release, push to GitHub Packages — plus the shared Ruby quality gates (rubocop, codequality, coverage, docs) that any Ruby consumer wires up | `fluence-gateway-client`, `fluence-gateway-auth`, `fluence-ci-tools`, `mosaic-sdk` (release flow) + `gateway`, `ledger-back` (quality gates only) |
+| `app-*` | Timestamp tag, git-cliff changelog auto-merged on the working branch, force-push mirror to `main` | `gateway`, `ledger-back` |
+| `rails-*` | Rails-app-specific checks (brakeman, bundler-audit, ruby-audit) | `gateway`, `ledger-back` |
+| `vue-app-*` | Vue / Node frontend gates (`vue-tsc`, `eslint`, `prettier`, `vitest`) with sticky-comment diff vs baseline | `vision-front`, `fluence-gateway-auth-vue` |
+| `npm-*` | Semver bump (mono or multi-package), `npm install --package-lock-only`, auto-merged release PR, tag + GitHub Release. Mirror of the `ruby-gem-*` release flow for npm packages on GitHub Packages | `fluence-gateway-auth-vue` |
 | `claude-*` | Language-agnostic AI gates backed by `anthropics/claude-code-action` against a Pro/Max OAuth token | (any consumer) |
 
 For contributor guidelines and design principles, see [CONTRIBUTING.md](./CONTRIBUTING.md).
@@ -27,6 +28,8 @@ For contributor guidelines and design principles, see [CONTRIBUTING.md](./CONTRI
 | `ruby-gem-publish.yml` | `publish.yml` | `release: published` (+ optional `workflow_dispatch`) | Download the `.gem` asset from the release and push it to GitHub Packages |
 | `app-prepare-release.yml` | `prepare-release.yml` | `workflow_dispatch` | Generate timestamp tag, run git-cliff, open + auto-merge release PR |
 | `app-release.yml` | `release.yml` | `push` on the working branch + `paths: CHANGELOG.md` | Verify bot author, create tag + GitHub Release, force-push working→released branch |
+| `npm-prepare-release.yml` | `prepare-release.yml` | `workflow_dispatch` | Bump version in one or more `package.json`, refresh `package-lock.json`, open + auto-merge release PR. Optional `cross_pin_dependency` for tightly-coupled monorepo siblings. |
+| `npm-release.yml` | `release.yml` | `push main` + `paths: <package.json>` | Verify bot author, read version from package.json (verify sync across multi-package), tag + GitHub Release |
 
 ### Quality gates (docs, coverage, lint, security, codequality)
 
