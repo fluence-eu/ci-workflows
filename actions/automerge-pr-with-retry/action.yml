@@ -1,0 +1,66 @@
+name: Auto-merge PR with retry
+description: |
+  Enable auto-merge on a freshly-created PR, retrying briefly to
+  absorb GitHub's `enablePullRequestAutoMerge` propagation lag —
+  the mutation refuses while the PR is in "unstable" status, which
+  is common immediately after creation.
+
+  If auto-merge cannot be enabled after `max-attempts` tries, the
+  PR is closed and its branch deleted, so the next run starts from
+  a clean state instead of accumulating orphan `release/v*` PRs.
+
+  The action fails (`exit 1`) when auto-merge could not be enabled.
+  Callers don't need to check anything — the workflow run goes red
+  and the PR list stays clean.
+
+inputs:
+  pr-url:
+    description: URL of the PR to auto-merge (output of `gh pr create`).
+    required: true
+  app-token:
+    description: GitHub App installation token. The auto-merge is attributed to this user.
+    required: true
+  merge-method:
+    description: Merge method (`squash`, `merge`, `rebase`).
+    required: false
+    default: squash
+  max-attempts:
+    description: Number of `gh pr merge --auto` attempts before giving up.
+    required: false
+    default: "5"
+  retry-delay-seconds:
+    description: Seconds to sleep between attempts.
+    required: false
+    default: "2"
+  close-comment:
+    description: Comment posted when auto-merge could not be enabled and the PR is closed.
+    required: false
+    default: "Auto-close: failed to enable auto-merge. Re-run the workflow that opened this PR."
+
+runs:
+  using: composite
+  steps:
+    - name: Enable auto-merge (with retry) or close the PR
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.app-token }}
+        PR_URL: ${{ inputs.pr-url }}
+        MERGE_METHOD: ${{ inputs.merge-method }}
+        MAX_ATTEMPTS: ${{ inputs.max-attempts }}
+        RETRY_DELAY: ${{ inputs.retry-delay-seconds }}
+        CLOSE_COMMENT: ${{ inputs.close-comment }}
+      run: |
+        for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+          if gh pr merge "$PR_URL" --auto --"$MERGE_METHOD" --delete-branch; then
+            exit 0
+          fi
+          echo "auto-merge attempt ${attempt}/${MAX_ATTEMPTS} failed, retrying in ${RETRY_DELAY}s..."
+          sleep "$RETRY_DELAY"
+        done
+
+        # Auto-merge never took: close + delete branch so the next
+        # run starts clean and the PR list does not accumulate stale
+        # release/v* entries.
+        echo "auto-merge failed after ${MAX_ATTEMPTS} attempts, closing PR"
+        gh pr close "$PR_URL" --delete-branch --comment "$CLOSE_COMMENT"
+        exit 1

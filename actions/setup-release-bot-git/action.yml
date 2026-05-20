@@ -1,0 +1,31 @@
+name: Setup Release Bot Git Identity
+description: |
+  Configure `git` to commit as the Fluence release App's bot user.
+  Centralises the `BOT_USER` / `BOT_ID` lookup + `git config` that
+  every release-related reusable workflow duplicates.
+
+  Must run after a checkout that used the App token, so push/PR
+  operations are attributed to the bot. Pass the same App token
+  that `release-app-token@v3+` produced.
+
+inputs:
+  app-token:
+    description: GitHub App installation token from `release-app-token`. Used to read the bot user via the GitHub API.
+    required: true
+  app-slug:
+    description: Slug of the App (e.g. `fluence-release-bot`), as output by `release-app-token`.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Configure git as the release app
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.app-token }}
+        APP_SLUG: ${{ inputs.app-slug }}
+      run: |
+        BOT_USER="${APP_SLUG}[bot]"
+        BOT_ID=$(gh api "/users/${BOT_USER}" --jq .id)
+        git config user.name "${BOT_USER}"
+        git config user.email "${BOT_ID}+${BOT_USER}@users.noreply.github.com"
