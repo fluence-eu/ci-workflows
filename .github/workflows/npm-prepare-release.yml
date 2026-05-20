@@ -1,7 +1,8 @@
 name: NPM — Prepare Release PR
 
 # Bumps the version field in one or more package.json files, refreshes
-# package-lock.json, opens an auto-merged PR. Companion to npm-release.yml:
+# package-lock.json, regenerates CHANGELOG.md from conventional commits
+# via git-cliff, opens an auto-merged PR. Companion to npm-release.yml:
 # the auto-merged "release: vX" commit fires the release pipeline.
 #
 # Mono-repo: pass `package_paths: package.json` (default).
@@ -12,6 +13,10 @@ name: NPM — Prepare Release PR
 # declares it. Use this when one workspace package depends on another
 # in the same monorepo and you want them released as a tight pair (e.g.
 # a UI package importing an internal API from a sibling).
+#
+# Requires `cliff.toml` at the repo root (mirror the convention from the
+# ruby-gem-* family). The reusable does NOT ship a default config — that
+# keeps per-repo customization in the consumer's hands.
 
 on:
   workflow_call:
@@ -117,6 +122,15 @@ jobs:
       - name: Refresh package-lock.json
         run: npm install --package-lock-only
 
+      - name: Generate changelog
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --tag v${{ inputs.version }}
+        env:
+          OUTPUT: CHANGELOG.md
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create release branch + push
         id: branch
         env:
@@ -126,13 +140,14 @@ jobs:
           set -euo pipefail
           BRANCH="release/v$VERSION"
           git checkout -b "$BRANCH"
-          # Stage every bumped package.json plus the refreshed lock.
+          # Stage every bumped package.json plus the refreshed lock + changelog.
           while IFS= read -r pkg; do
             pkg="$(echo "$pkg" | xargs)"
             [ -z "$pkg" ] && continue
             git add "$pkg"
           done <<< "$PACKAGE_PATHS"
           [ -f package-lock.json ] && git add package-lock.json
+          [ -f CHANGELOG.md ] && git add CHANGELOG.md
           git commit -m "release: v$VERSION"
           git push -u origin "$BRANCH"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"

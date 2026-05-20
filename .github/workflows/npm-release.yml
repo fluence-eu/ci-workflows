@@ -22,10 +22,10 @@ on:
         default: |
           package.json
       notes_source:
-        description: "Release notes source forwarded to tag-and-release: 'auto' | 'changelog' | 'file'. Defaults to 'auto' (GitHub auto-generated)."
+        description: "Release notes source forwarded to tag-and-release: 'auto' | 'changelog' | 'file'. Defaults to 'changelog' (npm-prepare-release.yml runs git-cliff and commits CHANGELOG.md alongside the bump)."
         required: false
         type: string
-        default: auto
+        default: changelog
       changelog_path:
         description: "Path to CHANGELOG.md when notes_source is 'changelog'."
         required: false
