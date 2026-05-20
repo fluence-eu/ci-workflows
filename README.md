@@ -1,6 +1,6 @@
 # ci-workflows
 
-Reusable GitHub Actions workflows shared across [fluence-eu](https://github.com/fluence-eu) projects — **gems** (semver release + packages push), **Rails apps** (rolling release + main mirror), and **Vue / Node frontends** (quality gates with sticky-comment diff).
+Reusable GitHub Actions workflows shared across [fluence-eu](https://github.com/fluence-eu) projects — **gems** (semver release + packages push), **npm packages** (mono/multi-package release + packages push), **Rails apps** (rolling release + main mirror), and **Vue / Node frontends** (quality gates with sticky-comment diff).
 
 Workflow families:
 
@@ -23,8 +23,8 @@ For contributor guidelines and design principles, see [CONTRIBUTING.md](./CONTRI
 
 | Central workflow | Consumer file | Trigger | Role |
 |---|---|---|---|
-| `ruby-gem-prepare-release.yml` | `prepare-release.yml` | `workflow_dispatch` | Bump version, regenerate `CHANGELOG.md`, open release PR |
-| `ruby-gem-release.yml` | `release.yml` | `push` on the version file | Tag, GitHub Release, build & attach the `.gem` asset |
+| `ruby-gem-prepare-release.yml` | `prepare-release.yml` | `workflow_dispatch` | Bump version (mono or multi-gem via `gem_specs`), regenerate `CHANGELOG.md`, open + auto-merge release PR |
+| `ruby-gem-release.yml` | `release.yml` | `push` on the version file | Verify bot author, tag, GitHub Release, build & attach the `.gem` asset(s) |
 | `ruby-gem-publish.yml` | `publish.yml` | `release: published` (+ optional `workflow_dispatch`) | Download the `.gem` asset from the release and push it to GitHub Packages |
 | `app-prepare-release.yml` | `prepare-release.yml` | `workflow_dispatch` | Generate timestamp tag, run git-cliff, open + auto-merge release PR |
 | `app-release.yml` | `release.yml` | `push` on the working branch + `paths: CHANGELOG.md` | Verify bot author, create tag + GitHub Release, force-push working→released branch |
@@ -98,10 +98,17 @@ Use `@main` only for active central-workflow development.
 
 ```
 Operator dispatches "Prepare Release PR"
-  └── ruby-gem-prepare-release.yml — opens release/vX.Y.Z PR
+  └── ruby-gem-prepare-release.yml
+        ├── Bump VERSION constant across each gem in `gem_specs`
+        ├── git-cliff --tag vX.Y.Z (refresh CHANGELOG.md)
+        └── Create release/vX.Y.Z PR on main, auto-merge (squash)
 
-Release PR merges → push on version file
-  └── ruby-gem-release.yml — tags, creates GitHub Release, attaches .gem
+Auto-merge lands "release: vX.Y.Z" commit on main, touching version.rb
+  └── ruby-gem-release.yml (triggered by paths: version.rb)
+        ├── Verify commit author is the release bot
+        ├── Read version from gemspec (verify sync across multi-gem)
+        ├── Create tag + GitHub Release (release notes from CHANGELOG section)
+        └── Build + attach each gem-name-*.gem asset
 
 GitHub Release is published (automatic signal from the above)
   └── ruby-gem-publish.yml — downloads the .gem asset, pushes to GitHub Packages
@@ -509,7 +516,7 @@ jobs:
 
 `GITHUB_TOKEN` is auto-provided by Actions — never declared in `secrets:`.
 
-`RELEASE_APP_*` is the write-capable app that opens release PRs, tags releases, and force-pushes mirrors. `FLUENCE_CI_BOT_*` is the read-only app that authors sticky PR comments so they show up as a verified bot rather than `github-actions[bot]`.
+`FLUENCE_RELEASE_BOT_*` is the write-capable app that opens release PRs, tags releases, and force-pushes mirrors. `FLUENCE_CI_BOT_*` is the read-only app that authors sticky PR comments so they show up as a verified bot rather than `github-actions[bot]`.
 
 All four entries above are configured at the **`fluence-eu` organisation level** and automatically inherited by every repo in the org — a new consumer in `fluence-eu` does **not** need to copy them into its own Secrets / Variables. Repos outside the org must declare them per-repo.
 
