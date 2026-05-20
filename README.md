@@ -6,7 +6,7 @@ Workflow families:
 
 | Prefix | Pattern | Used by |
 |---|---|---|
-| `ruby-gem-*` | Semver bump, `.gemspec` build, attach to GitHub Release, push to GitHub Packages — plus the shared Ruby quality gates (rubocop, codequality, coverage, docs) that any Ruby consumer wires up | `fluence-gateway-client`, `fluence-gateway-auth`, `mosaic-sdk` (release flow) + `gateway`, `ledger` (quality gates only) |
+| `ruby-gem-*` | Semver bump, `.gemspec` build, attach to GitHub Release, push to GitHub Packages — plus the shared Ruby quality gates (rubocop, codequality, coverage, docs) that any Ruby consumer wires up | `fluence-gateway-client`, `fluence-gateway-auth`, `fluence-ci-tools`, `mosaic-sdk` (release flow) + `gateway`, `ledger` (quality gates only) |
 | `app-*` | Timestamp tag, git-cliff changelog auto-merged on the working branch, force-push mirror to `main` | `gateway`, `ledger` |
 | `rails-*` | Rails-app-specific checks (brakeman, bundler-audit, ruby-audit) | `gateway`, `ledger` |
 | `vue-app-*` | Vue / Node frontend gates (`vue-tsc`, `eslint`, `prettier`, `vitest`) with sticky-comment diff vs baseline | `vision-front` |
