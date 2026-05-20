@@ -21,12 +21,12 @@ on:
         description: Working branch to release from.
         required: false
         type: string
-        default: 'develop'
+        default: "develop"
       tag_format:
         description: UTC date format for the generated tag (passed to `date -u +…`).
         required: false
         type: string
-        default: '%Y.%m.%d.%H%M%S'
+        default: "%Y.%m.%d.%H%M%S"
     secrets:
       FLUENCE_RELEASE_BOT_PRIVATE_KEY:
         description: Private key of the GitHub App that opens + auto-merges the release PR.
@@ -59,15 +59,10 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Configure git as the release app
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
-        run: |
-          BOT_USER="${APP_SLUG}[bot]"
-          BOT_ID=$(gh api "/users/${BOT_USER}" --jq .id)
-          git config user.name "${BOT_USER}"
-          git config user.email "${BOT_ID}+${BOT_USER}@users.noreply.github.com"
+      - uses: fluence-eu/ci-workflows/actions/setup-release-bot-git@v5
+        with:
+          app-token: ${{ steps.app-token.outputs.token }}
+          app-slug: ${{ steps.app-token.outputs.app-slug }}
 
       - name: Generate tag
         id: version
@@ -98,8 +93,9 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Create and auto-merge changelog PR
+      - name: Create release branch + PR
         if: steps.diff.outputs.changed == 'true'
+        id: pr
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           TAG: ${{ steps.version.outputs.tag }}
@@ -115,24 +111,10 @@ jobs:
             --body "Update changelog for release ${TAG}. Auto-merged once required checks pass." \
             --base "$BASE" \
             --head "$BRANCH")
+          echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
 
-          # GitHub's enablePullRequestAutoMerge mutation refuses while
-          # the PR is in "unstable" status — the freshly created PR's
-          # mergeable state has not yet propagated. Retry briefly to
-          # absorb the propagation lag rather than leaving the PR open
-          # without auto-merge enabled.
-          for attempt in 1 2 3 4 5; do
-            if gh pr merge "$PR_URL" --auto --squash --delete-branch; then
-              exit 0
-            fi
-            echo "auto-merge attempt ${attempt}/5 failed, retrying in 2s..."
-            sleep 2
-          done
-
-          # Auto-merge never took. Close the orphan PR + delete its
-          # branch so the next prepare-release run starts clean and
-          # the PR list does not accumulate stale release/v* entries.
-          echo "auto-merge failed after 5 attempts, closing PR"
-          gh pr close "$PR_URL" --delete-branch \
-            --comment "Auto-close: failed to enable auto-merge after 5 retries. Re-run the Prepare Release PR workflow."
-          exit 1
+      - uses: fluence-eu/ci-workflows/actions/automerge-pr-with-retry@v5
+        if: steps.diff.outputs.changed == 'true'
+        with:
+          pr-url: ${{ steps.pr.outputs.url }}
+          app-token: ${{ steps.app-token.outputs.token }}
