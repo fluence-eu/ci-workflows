@@ -1,8 +1,8 @@
 # Contributing
 
-Thanks for contributing! This repo hosts reusable GitHub Actions workflows shared across [fluence-eu](https://github.com/fluence-eu) projects. Every change is consumed automatically by those repos once the active major tag (`@v3`) moves, so small mistakes have a wide blast radius.
+Thanks for contributing! This repo hosts reusable GitHub Actions workflows shared across [fluence-eu](https://github.com/fluence-eu) projects. Every change is consumed automatically by those repos once the active major tag (`@v5`) moves, so small mistakes have a wide blast radius.
 
-**Direct push to `main` is forbidden.** All changes — including doc updates and one-line fixes — go through a pull request. The active major tag (`@v3`) is moved by the maintainer who merges the PR, so any drift between `main` and the active major reflects an explicit decision (e.g. cutting the next major).
+**Direct push to `main` is forbidden.** All changes — including doc updates and one-line fixes — go through a pull request. The active major tag (`@v5`) is moved by the maintainer who merges the PR, so any drift between `main` and the active major reflects an explicit decision (e.g. cutting the next major).
 
 Standard flow:
 
@@ -11,7 +11,7 @@ Standard flow:
 3. Implement the change
 4. Test it end-to-end from a consumer PR (see "Testing changes" below)
 5. Open a pull request targeting `main`
-6. After merge — move the active major tag (`@v3`) to the new main HEAD if the change is non-breaking (see "Versioning" below)
+6. After merge — move the active major tag (`@v5`) to the new main HEAD if the change is non-breaking (see "Versioning" below)
 
 ---
 
@@ -38,7 +38,7 @@ Family prefixes:
 - `app-*` — rolling-release apps (any language): timestamp tag, changelog auto-merged on `develop`, force-push mirror to `main`.
 - `rails-*` — Rails-app-specific checks (security scan, future test/coverage variants with postgres, etc.). Use this prefix only for reusables that genuinely need Rails (not just Ruby).
 
-If you need a new family, coordinate on the issue first — consumers already pin `@v3` across all three.
+If you need a new family, coordinate on the issue first — consumers already pin `@v5` across all three.
 
 ---
 
@@ -97,7 +97,7 @@ GitHub auto-generates nice step display names from each action's `action.yml` me
 
 ### 6. Helper scripts via composite actions
 
-Ruby helpers (`coverage_report.rb`, `yardstick_report.rb`, `rubocop_report.rb`) are wrapped as composite actions under `actions/{name}-report/`. Each composite action declares its inputs, calls the Ruby script via `${GITHUB_ACTION_PATH}`, and exposes the Markdown body as an output. The reusable PR workflows consume them via `uses: fluence-eu/ci-workflows/actions/{name}-report@v3` — no sidecar checkout, no dedicated GitHub App.
+Ruby helpers (`coverage_report.rb`, `yardstick_report.rb`, `rubocop_report.rb`) are wrapped as composite actions under `actions/{name}-report/`. Each composite action declares its inputs, calls the Ruby script via `${GITHUB_ACTION_PATH}`, and exposes the Markdown body as an output. The reusable PR workflows consume them via `uses: fluence-eu/ci-workflows/actions/{name}-report@v5` — no sidecar checkout, no dedicated GitHub App.
 
 When you add a helper:
 - Create `actions/<name>-report/` with an `action.yml` (declare inputs + `outputs.body.value`) and the Ruby script next to it
@@ -154,7 +154,7 @@ Temporarily pin consumers to a branch while iterating:
 uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-pr.yml@refactor/my-branch
 ```
 
-Move back to `@v3` before merging either side.
+Move back to `@v5` before merging either side.
 
 ---
 
@@ -173,7 +173,7 @@ This repo has no self-contained test suite — the contract is the consumer pipe
    - Each job produces the expected artifacts / PR comment / release asset
    - Skipped jobs are truly unused triggers, not masked failures
 
-3. **Main merge + tag move.** Only once the consumer PR goes green, merge your ci-workflows PR and move the active major tag (`@v3`). Repin the consumer PR to `@v3`, confirm it still passes, then merge.
+3. **Main merge + tag move.** Only once the consumer PR goes green, merge your ci-workflows PR and move the active major tag (`@v5`). Repin the consumer PR to `@v5`, confirm it still passes, then merge.
 
 ---
 
@@ -201,7 +201,7 @@ Do not include `Co-Authored-By:` trailers or any AI attribution.
 - [ ] Every new input has a `description:` and a default (or is genuinely required and documented)
 - [ ] `github.event.*` / user-controllable values go through `env:`, not inline `${{ }}` in `run:`
 - [ ] Tested from at least one consumer PR with a branch pin
-- [ ] Decided whether this is an active-major fast-forward (`@v3`) or a new major cut (`@v4`)
+- [ ] Decided whether this is an active-major fast-forward (`@v5`) or a new major cut (`@v6`)
 - [ ] README.md updated if inputs, outputs, or the consumer contract changed
 
 ---

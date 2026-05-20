@@ -72,7 +72,7 @@ permissions:
 
 jobs:
   review:
-    uses: fluence-eu/ci-workflows/.github/workflows/claude-review-pr.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/claude-review-pr.yml@v5
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       FLUENCE_RELEASE_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}  # optional — skips release PRs
@@ -86,9 +86,9 @@ jobs:
 
 ---
 
-## Pinning: `@v3`
+## Pinning: `@v5`
 
-All workflow references pin to the current major (`@v3` as of writing — `v1` and `v2` are frozen at their last commits). The active major tag is kept mobile: it points at the latest backward-compatible commit of `main`. Bug fixes are picked up by consumers automatically on the next run. Breaking changes (removed input, new required secret, changed semantics) cut a new major (next would be `@v4`); see [CONTRIBUTING.md](./CONTRIBUTING.md#versioning) for the rules.
+All workflow references pin to the current major (`@v5` as of writing — `v1` through `v4` are frozen at their last commits). The active major tag is kept mobile: it points at the latest backward-compatible commit of `main`. Bug fixes are picked up by consumers automatically on the next run. Breaking changes (removed input, new required secret, changed semantics) cut a new major (next would be `@v6`); see [CONTRIBUTING.md](./CONTRIBUTING.md#versioning) for the rules.
 
 Use `@main` only for active central-workflow development.
 
@@ -159,7 +159,7 @@ Pull request
   └── ruby-gem-rubocop-pr.yml       — re-measure PR head + offenses diff + sticky comment
 ```
 
-Helper scripts (`coverage_report.rb`, `yardstick_report.rb`, `rubocop_report.rb`) are wrapped as **composite actions** under `actions/{name}-report/`. The PR workflows call them via `uses: fluence-eu/ci-workflows/actions/{name}-report@v3` — no sidecar checkout, no additional GitHub App.
+Helper scripts (`coverage_report.rb`, `yardstick_report.rb`, `rubocop_report.rb`) are wrapped as **composite actions** under `actions/{name}-report/`. The PR workflows call them via `uses: fluence-eu/ci-workflows/actions/{name}-report@v5` — no sidecar checkout, no additional GitHub App.
 
 ---
 
@@ -184,7 +184,7 @@ on:
 
 jobs:
   prepare:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-prepare-release.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-prepare-release.yml@v5
     with:
       gem_name: my-gem-name                 # must match <gem_name>.gemspec
       version_file: lib/my/gem/version.rb
@@ -211,7 +211,7 @@ on:
 
 jobs:
   release:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-release.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-release.yml@v5
     with:
       gem_name: my-gem-name
     secrets:
@@ -234,7 +234,7 @@ on:
 
 jobs:
   publish:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-publish.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-publish.yml@v5
     with:
       gem_name: my-gem-name
     permissions:
@@ -259,7 +259,7 @@ on:
 
 jobs:
   prepare:
-    uses: fluence-eu/ci-workflows/.github/workflows/app-prepare-release.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/app-prepare-release.yml@v5
     secrets:
       FLUENCE_RELEASE_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
     permissions:
@@ -281,7 +281,7 @@ on:
 
 jobs:
   release:
-    uses: fluence-eu/ci-workflows/.github/workflows/app-release.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/app-release.yml@v5
     secrets:
       FLUENCE_RELEASE_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
     permissions:
@@ -309,7 +309,7 @@ on:
   workflow_dispatch:
 jobs:
   docs:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-deploy.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-deploy.yml@v5
     with:
       # ruby_version: '3.2'                 # optional, default '4.0'
     permissions:
@@ -326,7 +326,7 @@ on:
     branches: [main]
 jobs:
   measure:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-measure.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-measure.yml@v5
     permissions:
       contents: read
       packages: read
@@ -339,7 +339,7 @@ on:
   pull_request:
 jobs:
   docs:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-pr.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-pr.yml@v5
     secrets:
       FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
       FLUENCE_RELEASE_BOT_PRIVATE_KEY:    ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -360,7 +360,7 @@ on:
     branches: [main]
 jobs:
   measure:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-measure.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-measure.yml@v5
     # with:
     #   rake_task: 'test'                   # default 'spec' — override for minitest projects
     permissions:
@@ -375,7 +375,7 @@ on:
   pull_request:
 jobs:
   coverage:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-pr.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-pr.yml@v5
     # with:
     #   rake_task:     'test'
     #   exclude_files: 'lib/my/gem/version.rb'  # undercover --exclude-files glob
@@ -399,7 +399,7 @@ on:
     branches: [main]
 jobs:
   measure:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-rubocop-measure.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-rubocop-measure.yml@v5
     permissions:
       contents: read
       packages: read
@@ -412,7 +412,7 @@ on:
   pull_request:
 jobs:
   rubocop:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-rubocop-pr.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-rubocop-pr.yml@v5
     secrets:
       FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
       FLUENCE_RELEASE_BOT_PRIVATE_KEY:    ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -433,7 +433,7 @@ on:
     branches: [main]
 jobs:
   measure:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-measure.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-measure.yml@v5
     with:
       paths: 'app lib'                       # default 'lib'
     permissions:
@@ -448,7 +448,7 @@ on:
   pull_request:
 jobs:
   codequality:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-pr.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-pr.yml@v5
     with:
       paths: 'app lib'
     secrets:
@@ -471,7 +471,7 @@ on:
     branches: [main]
 jobs:
   measure:
-    uses: fluence-eu/ci-workflows/.github/workflows/rails-security-measure.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/rails-security-measure.yml@v5
     permissions:
       contents: read
       packages: read
@@ -484,7 +484,7 @@ on:
   pull_request:
 jobs:
   security:
-    uses: fluence-eu/ci-workflows/.github/workflows/rails-security-pr.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/rails-security-pr.yml@v5
     secrets:
       FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
       FLUENCE_RELEASE_BOT_PRIVATE_KEY:    ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -587,7 +587,7 @@ on:
 jobs:
   publish:
     if: startsWith(github.event.release.tag_name, 'gem-a-')
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-publish.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-publish.yml@v5
     with:
       gem_name: gem-a
     ...
