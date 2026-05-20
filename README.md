@@ -6,9 +6,9 @@ Workflow families:
 
 | Prefix | Pattern | Used by |
 |---|---|---|
-| `ruby-gem-*` | Semver bump, `.gemspec` build, attach to GitHub Release, push to GitHub Packages — plus the shared Ruby quality gates (rubocop, codequality, coverage, docs) that any Ruby consumer wires up | `fluence-gateway-client`, `fluence-gateway-auth`, `fluence-ci-tools`, `mosaic-sdk` (release flow) + `gateway`, `ledger-back` (quality gates only) |
-| `app-*` | Timestamp tag, git-cliff changelog auto-merged on the working branch, force-push mirror to `main` | `gateway`, `ledger-back` |
-| `rails-*` | Rails-app-specific checks (brakeman, bundler-audit, ruby-audit) | `gateway`, `ledger-back` |
+| `ruby-gem-*` | Semver bump, `.gemspec` build, attach to GitHub Release, push to GitHub Packages — plus the shared Ruby quality gates (rubocop, codequality, coverage, docs) that any Ruby consumer wires up | `fluence-gateway-client`, `fluence-gateway-auth-ruby`, `fluence-ci-tools`, `mosaic-sdk` (release flow) + `gateway-back`, `ledger-back` (quality gates only) |
+| `app-*` | Timestamp tag, git-cliff changelog auto-merged on the working branch, force-push mirror to `main` | `gateway-back`, `ledger-back` |
+| `rails-*` | Rails-app-specific checks (brakeman, bundler-audit, ruby-audit) | `gateway-back`, `ledger-back` |
 | `vue-app-*` | Vue / Node frontend gates (`vue-tsc`, `eslint`, `prettier`, `vitest`) with sticky-comment diff vs baseline | `vision-front`, `fluence-gateway-auth-vue` |
 | `npm-*` | Semver bump (mono or multi-package), `npm install --package-lock-only`, auto-merged release PR, tag + GitHub Release. Mirror of the `ruby-gem-*` release flow for npm packages on GitHub Packages | `fluence-gateway-auth-vue` |
 | `claude-*` | Language-agnostic AI gates backed by `anthropics/claude-code-action` against a Pro/Max OAuth token | (any consumer) |
@@ -547,7 +547,7 @@ Because `fluence-ci-tools` lives on GitHub Packages (private), each consumer wor
 
 - Grant `packages: read` on the calling job's `permissions:` block.
 - Set `BUNDLE_RUBYGEMS__PKG__GITHUB__COM: ${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}` as workflow-level env so Bundler can authenticate against the registry.
-- **Be allow-listed on the package itself.** Per-package access is not org-inherited — open each private package's settings (e.g. https://github.com/orgs/fluence-eu/packages/rubygems/package/fluence-ci-tools/settings) → **Manage Actions access** → **Add repository** → select the new consumer repo → Role: **Read**. Repeat for every entry inside the `source 'https://rubygems.pkg.github.com/fluence-eu' do … end` block of the Gemfile (`mosaic-sdk`, `money-fluence-exchange`, `fluence-gateway-auth`, …). Without this, `bundle install` fails with `authentication is required` even when `packages: read` and the `BUNDLE_…` env var are set correctly.
+- **Be allow-listed on the package itself.** Per-package access is not org-inherited — open each private package's settings (e.g. https://github.com/orgs/fluence-eu/packages/rubygems/package/fluence-ci-tools/settings) → **Manage Actions access** → **Add repository** → select the new consumer repo → Role: **Read**. Repeat for every entry inside the `source 'https://rubygems.pkg.github.com/fluence-eu' do … end` block of the Gemfile (`mosaic-sdk`, `money-fluence-exchange`, `fluence-gateway-auth-ruby`, …). Without this, `bundle install` fails with `authentication is required` even when `packages: read` and the `BUNDLE_…` env var are set correctly.
 
 The reusables in this repo already declare `packages: read` at the workflow level — consumers just need to forward the permission via their wrapper (see the templates above).
 
