@@ -111,23 +111,23 @@ When you add a helper:
 
 ### Active major tag is mobile
 
-The current major tag (`v3` as of writing — `v1` and `v2` are frozen at their last commits) is force-moved to every new commit on `main`. Consumers pin the active major and pick up non-breaking changes automatically. **The maintainer merging a PR is responsible for moving the tag** — the move is an explicit step that gates the change reaching consumers.
+The current major tag (`v5` as of writing — `v1` through `v4` are frozen at their last commits) is force-moved to every new commit on `main`. Consumers pin the active major and pick up non-breaking changes automatically. **The maintainer merging a PR is responsible for moving the tag** — the move is an explicit step that gates the change reaching consumers.
 
 Two ways to do it:
 
 **From the GitHub UI** (preferred):
 1. Open *Actions* → *Move major tag* → *Run workflow*.
-2. Pass the major tag (`v3` to fast-forward, `v4` to cut the next major) and leave `ref` empty to point at main HEAD.
+2. Pass the major tag (`v5` to fast-forward, `v6` to cut the next major) and leave `ref` empty to point at main HEAD.
 
 **Locally**:
 ```bash
 git fetch origin main
 git checkout main && git pull
-git tag -f v3                # current major
-git push origin v3 --force
+git tag -f v5                # current major
+git push origin v5 --force
 ```
 
-If your PR contains a breaking change (see below), do not move the current major — cut the next one (`v4`) instead.
+If your PR contains a breaking change (see below), do not move the current major — cut the next one (`v6`) instead.
 
 ### What counts as breaking
 

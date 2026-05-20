@@ -186,8 +186,7 @@ jobs:
   prepare:
     uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-prepare-release.yml@v5
     with:
-      gem_name: my-gem-name                 # must match <gem_name>.gemspec
-      version_file: lib/my/gem/version.rb
+      gem_specs: my-gem-name                # gem name without .gemspec; multi-gem accepts a multiline list
       bump: ${{ inputs.bump }}
       # ruby_version: '3.2'                 # optional, default '4.0'
     secrets:
@@ -213,7 +212,7 @@ jobs:
   release:
     uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-release.yml@v5
     with:
-      gem_name: my-gem-name
+      gem_specs: my-gem-name
     secrets:
       # Forwarded so `gh release create` runs with the App's installation
       # token. App-issued release events trigger downstream `publish.yml` —
@@ -242,7 +241,7 @@ jobs:
       packages: write
 ```
 
-The release workflow reads the version via `Gem::Specification.load('<gem_name>.gemspec').version` — same source of truth `gem build` uses. Only `gem_name` is required.
+The release workflow reads the version via `Gem::Specification.load('<gem>.gemspec').version` — same source of truth `gem build` uses. Only `gem_specs` is required; the version file path is auto-derived via the Bundler default convention (`lib/<gem with - as />/version.rb`). For non-standard layouts, override per gem with `gem_specs: my-gem:lib/non/standard/v.rb`. For multi-gem repos, pass a multiline list — all gems are released as a tightly-coupled set under one tag.
 
 The publish workflow reads the tag from the `release` event directly — no `tag` input.
 
