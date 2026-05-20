@@ -1,20 +1,20 @@
 name: Move major tag
 
 # Manually dispatch to create or force-move a major version tag
-# (`v3`, `v4`, …) to the latest commit on main (or to an arbitrary
+# (`v5`, `v6`, …) to the latest commit on main (or to an arbitrary
 # commit via the `ref` input). Replaces the manual
 # `git tag -f vN && git push origin vN --force` documented in
 # CONTRIBUTING.md — same effect, run from the GitHub UI.
 #
 # Tag input is constrained to `^v[0-9]+$` so this workflow only
 # operates on the mobile major-tag pattern. Patch / minor tags
-# (`v3.0.0`, etc.) are not in scope; cut those manually if needed.
+# (`v5.0.0`, etc.) are not in scope; cut those manually if needed.
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to create or move (e.g. v3 for the active major, v4 to cut a new major)'
+        description: 'Tag to create or move (e.g. v5 for the active major, v6 to cut a new major)'
         required: true
         type: string
       ref:
@@ -42,7 +42,7 @@ jobs:
           TAG: ${{ inputs.tag }}
         run: |
           if ! [[ "$TAG" =~ ^v[0-9]+$ ]]; then
-            echo "::error::tag must match ^v[0-9]+$ (e.g. v3, v4) — got: $TAG"
+            echo "::error::tag must match ^v[0-9]+$ (e.g. v5, v6) — got: $TAG"
             exit 1
           fi
 

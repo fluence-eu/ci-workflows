@@ -1,6 +1,6 @@
 # ci-workflows
 
-Reusable GitHub Actions workflows shared across [fluence-eu](https://github.com/fluence-eu) projects — **gems** (semver release + packages push), **Rails apps** (rolling release + main mirror), and **Vue / Node frontends** (quality gates with sticky-comment diff).
+Reusable GitHub Actions workflows shared across [fluence-eu](https://github.com/fluence-eu) projects — **gems** (semver release + packages push), **npm packages** (mono/multi-package release + packages push), **Rails apps** (rolling release + main mirror), and **Vue / Node frontends** (quality gates with sticky-comment diff).
 
 Workflow families:
 
@@ -23,8 +23,8 @@ For contributor guidelines and design principles, see [CONTRIBUTING.md](./CONTRI
 
 | Central workflow | Consumer file | Trigger | Role |
 |---|---|---|---|
-| `ruby-gem-prepare-release.yml` | `prepare-release.yml` | `workflow_dispatch` | Bump version, regenerate `CHANGELOG.md`, open release PR |
-| `ruby-gem-release.yml` | `release.yml` | `push` on the version file | Tag, GitHub Release, build & attach the `.gem` asset |
+| `ruby-gem-prepare-release.yml` | `prepare-release.yml` | `workflow_dispatch` | Bump version (mono or multi-gem via `gem_specs`), regenerate `CHANGELOG.md`, open + auto-merge release PR |
+| `ruby-gem-release.yml` | `release.yml` | `push` on the version file | Verify bot author, tag, GitHub Release, build & attach the `.gem` asset(s) |
 | `ruby-gem-publish.yml` | `publish.yml` | `release: published` (+ optional `workflow_dispatch`) | Download the `.gem` asset from the release and push it to GitHub Packages |
 | `app-prepare-release.yml` | `prepare-release.yml` | `workflow_dispatch` | Generate timestamp tag, run git-cliff, open + auto-merge release PR |
 | `app-release.yml` | `release.yml` | `push` on the working branch + `paths: CHANGELOG.md` | Verify bot author, create tag + GitHub Release, force-push working→released branch |
@@ -72,7 +72,7 @@ permissions:
 
 jobs:
   review:
-    uses: fluence-eu/ci-workflows/.github/workflows/claude-review-pr.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/claude-review-pr.yml@v5
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       FLUENCE_RELEASE_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}  # optional — skips release PRs
@@ -86,9 +86,9 @@ jobs:
 
 ---
 
-## Pinning: `@v3`
+## Pinning: `@v5`
 
-All workflow references pin to the current major (`@v3` as of writing — `v1` and `v2` are frozen at their last commits). The active major tag is kept mobile: it points at the latest backward-compatible commit of `main`. Bug fixes are picked up by consumers automatically on the next run. Breaking changes (removed input, new required secret, changed semantics) cut a new major (next would be `@v4`); see [CONTRIBUTING.md](./CONTRIBUTING.md#versioning) for the rules.
+All workflow references pin to the current major (`@v5` as of writing — `v1` through `v4` are frozen at their last commits). The active major tag is kept mobile: it points at the latest backward-compatible commit of `main`. Bug fixes are picked up by consumers automatically on the next run. Breaking changes (removed input, new required secret, changed semantics) cut a new major (next would be `@v6`); see [CONTRIBUTING.md](./CONTRIBUTING.md#versioning) for the rules.
 
 Use `@main` only for active central-workflow development.
 
@@ -98,10 +98,17 @@ Use `@main` only for active central-workflow development.
 
 ```
 Operator dispatches "Prepare Release PR"
-  └── ruby-gem-prepare-release.yml — opens release/vX.Y.Z PR
+  └── ruby-gem-prepare-release.yml
+        ├── Bump VERSION constant across each gem in `gem_specs`
+        ├── git-cliff --tag vX.Y.Z (refresh CHANGELOG.md)
+        └── Create release/vX.Y.Z PR on main, auto-merge (squash)
 
-Release PR merges → push on version file
-  └── ruby-gem-release.yml — tags, creates GitHub Release, attaches .gem
+Auto-merge lands "release: vX.Y.Z" commit on main, touching version.rb
+  └── ruby-gem-release.yml (triggered by paths: version.rb)
+        ├── Verify commit author is the release bot
+        ├── Read version from gemspec (verify sync across multi-gem)
+        ├── Create tag + GitHub Release (release notes from CHANGELOG section)
+        └── Build + attach each gem-name-*.gem asset
 
 GitHub Release is published (automatic signal from the above)
   └── ruby-gem-publish.yml — downloads the .gem asset, pushes to GitHub Packages
@@ -159,7 +166,7 @@ Pull request
   └── ruby-gem-rubocop-pr.yml       — re-measure PR head + offenses diff + sticky comment
 ```
 
-Helper scripts (`coverage_report.rb`, `yardstick_report.rb`, `rubocop_report.rb`) are wrapped as **composite actions** under `actions/{name}-report/`. The PR workflows call them via `uses: fluence-eu/ci-workflows/actions/{name}-report@v3` — no sidecar checkout, no additional GitHub App.
+Helper scripts (`coverage_report.rb`, `yardstick_report.rb`, `rubocop_report.rb`) are wrapped as **composite actions** under `actions/{name}-report/`. The PR workflows call them via `uses: fluence-eu/ci-workflows/actions/{name}-report@v5` — no sidecar checkout, no additional GitHub App.
 
 ---
 
@@ -184,10 +191,9 @@ on:
 
 jobs:
   prepare:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-prepare-release.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-prepare-release.yml@v5
     with:
-      gem_name: my-gem-name                 # must match <gem_name>.gemspec
-      version_file: lib/my/gem/version.rb
+      gem_specs: my-gem-name                # gem name without .gemspec; multi-gem accepts a multiline list
       bump: ${{ inputs.bump }}
       # ruby_version: '3.2'                 # optional, default '4.0'
     secrets:
@@ -211,9 +217,9 @@ on:
 
 jobs:
   release:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-release.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-release.yml@v5
     with:
-      gem_name: my-gem-name
+      gem_specs: my-gem-name
     secrets:
       # Forwarded so `gh release create` runs with the App's installation
       # token. App-issued release events trigger downstream `publish.yml` —
@@ -234,7 +240,7 @@ on:
 
 jobs:
   publish:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-publish.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-publish.yml@v5
     with:
       gem_name: my-gem-name
     permissions:
@@ -242,7 +248,7 @@ jobs:
       packages: write
 ```
 
-The release workflow reads the version via `Gem::Specification.load('<gem_name>.gemspec').version` — same source of truth `gem build` uses. Only `gem_name` is required.
+The release workflow reads the version via `Gem::Specification.load('<gem>.gemspec').version` — same source of truth `gem build` uses. Only `gem_specs` is required; the version file path is auto-derived via the Bundler default convention (`lib/<gem with - as />/version.rb`). For non-standard layouts, override per gem with `gem_specs: my-gem:lib/non/standard/v.rb`. For multi-gem repos, pass a multiline list — all gems are released as a tightly-coupled set under one tag.
 
 The publish workflow reads the tag from the `release` event directly — no `tag` input.
 
@@ -259,7 +265,7 @@ on:
 
 jobs:
   prepare:
-    uses: fluence-eu/ci-workflows/.github/workflows/app-prepare-release.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/app-prepare-release.yml@v5
     secrets:
       FLUENCE_RELEASE_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
     permissions:
@@ -281,7 +287,7 @@ on:
 
 jobs:
   release:
-    uses: fluence-eu/ci-workflows/.github/workflows/app-release.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/app-release.yml@v5
     secrets:
       FLUENCE_RELEASE_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
     permissions:
@@ -309,7 +315,7 @@ on:
   workflow_dispatch:
 jobs:
   docs:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-deploy.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-deploy.yml@v5
     with:
       # ruby_version: '3.2'                 # optional, default '4.0'
     permissions:
@@ -326,7 +332,7 @@ on:
     branches: [main]
 jobs:
   measure:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-measure.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-measure.yml@v5
     permissions:
       contents: read
       packages: read
@@ -339,7 +345,7 @@ on:
   pull_request:
 jobs:
   docs:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-pr.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-pr.yml@v5
     secrets:
       FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
       FLUENCE_RELEASE_BOT_PRIVATE_KEY:    ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -360,7 +366,7 @@ on:
     branches: [main]
 jobs:
   measure:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-measure.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-measure.yml@v5
     # with:
     #   rake_task: 'test'                   # default 'spec' — override for minitest projects
     permissions:
@@ -375,7 +381,7 @@ on:
   pull_request:
 jobs:
   coverage:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-pr.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-pr.yml@v5
     # with:
     #   rake_task:     'test'
     #   exclude_files: 'lib/my/gem/version.rb'  # undercover --exclude-files glob
@@ -399,7 +405,7 @@ on:
     branches: [main]
 jobs:
   measure:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-rubocop-measure.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-rubocop-measure.yml@v5
     permissions:
       contents: read
       packages: read
@@ -412,7 +418,7 @@ on:
   pull_request:
 jobs:
   rubocop:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-rubocop-pr.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-rubocop-pr.yml@v5
     secrets:
       FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
       FLUENCE_RELEASE_BOT_PRIVATE_KEY:    ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -433,7 +439,7 @@ on:
     branches: [main]
 jobs:
   measure:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-measure.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-measure.yml@v5
     with:
       paths: 'app lib'                       # default 'lib'
     permissions:
@@ -448,7 +454,7 @@ on:
   pull_request:
 jobs:
   codequality:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-pr.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-pr.yml@v5
     with:
       paths: 'app lib'
     secrets:
@@ -471,7 +477,7 @@ on:
     branches: [main]
 jobs:
   measure:
-    uses: fluence-eu/ci-workflows/.github/workflows/rails-security-measure.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/rails-security-measure.yml@v5
     permissions:
       contents: read
       packages: read
@@ -484,7 +490,7 @@ on:
   pull_request:
 jobs:
   security:
-    uses: fluence-eu/ci-workflows/.github/workflows/rails-security-pr.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/rails-security-pr.yml@v5
     secrets:
       FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
       FLUENCE_RELEASE_BOT_PRIVATE_KEY:    ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -510,7 +516,7 @@ jobs:
 
 `GITHUB_TOKEN` is auto-provided by Actions — never declared in `secrets:`.
 
-`RELEASE_APP_*` is the write-capable app that opens release PRs, tags releases, and force-pushes mirrors. `FLUENCE_CI_BOT_*` is the read-only app that authors sticky PR comments so they show up as a verified bot rather than `github-actions[bot]`.
+`FLUENCE_RELEASE_BOT_*` is the write-capable app that opens release PRs, tags releases, and force-pushes mirrors. `FLUENCE_CI_BOT_*` is the read-only app that authors sticky PR comments so they show up as a verified bot rather than `github-actions[bot]`.
 
 All four entries above are configured at the **`fluence-eu` organisation level** and automatically inherited by every repo in the org — a new consumer in `fluence-eu` does **not** need to copy them into its own Secrets / Variables. Repos outside the org must declare them per-repo.
 
@@ -587,7 +593,7 @@ on:
 jobs:
   publish:
     if: startsWith(github.event.release.tag_name, 'gem-a-')
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-publish.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-publish.yml@v5
     with:
       gem_name: gem-a
     ...
