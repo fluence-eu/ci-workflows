@@ -1,0 +1,84 @@
+name: Verify release was authored by the release bot
+description: |
+  Defense-in-depth check that the current `push` event matches a real
+  release commit and was authored by the release App's bot user.
+
+  The path-filtered triggers on consumer `release.yml` workflows
+  (e.g. `paths: CHANGELOG.md` or `paths: packages/*/package.json`)
+  also fire for feature/chore merges that happen to touch those
+  files. This step distinguishes those cases:
+
+  - Message doesn't start with `release: v` and doesn't look like a
+    `Merge pull request ... from .../release/v*` → not a release,
+    set `is_release=false` and exit 0 (clean skip; downstream steps
+    use `if: steps.verify.outputs.is_release == 'true'`).
+  - Message looks like a release commit, author is the bot → pass.
+  - Message looks like a release commit but author is human →
+    extract `#PR` number from the message, look up the PR author
+    via `gh pr view`, pass if PR author is the bot. Fail loud
+    otherwise.
+
+  The PR-author fallback covers the "merge commit" merge mode where
+  the squash commit author is whoever clicked the green button, while
+  the PR author is still the bot that opened it.
+
+  Consumed by `app-release.yml`, `ruby-gem-release.yml`, and
+  `npm-release.yml`. The action expects `release-app-token` to have
+  run earlier in the job and `gh` to be available (default on
+  ubuntu-latest runners).
+
+inputs:
+  app-slug:
+    description: "Slug of the release App (e.g. `fluence-release-bot`), as output by `release-app-token`. The bot user name is computed as `${app-slug}[bot]`."
+    required: true
+  github-token:
+    description: "GITHUB_TOKEN, used to query `gh pr view` for the merge-commit author-fallback path. Passing the App token also works but is not required."
+    required: true
+
+outputs:
+  is_release:
+    description: '`"true"` when the commit is a verified bot-authored release, `"false"` when it''s a non-release commit (clean skip). The action fails with `exit 1` when the commit looks like a release but the author check fails.'
+    value: ${{ steps.verify.outputs.is_release }}
+
+runs:
+  using: composite
+  steps:
+    - id: verify
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        EXPECTED_BOT: ${{ inputs.app-slug }}[bot]
+        AUTHOR: ${{ github.event.head_commit.author.name }}
+        MSG: ${{ github.event.head_commit.message }}
+        REPO: ${{ github.repository }}
+      run: |
+        case "$MSG" in
+          "release: v"*|*"from "*"/release/v"*)
+            : ;;
+          *)
+            echo "Not a release commit, skipping subsequent steps."
+            echo "is_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+            ;;
+        esac
+
+        # Squash merge: commit author is the bot directly.
+        if [ "$AUTHOR" = "$EXPECTED_BOT" ]; then
+          echo "Verified: commit authored by $AUTHOR"
+          echo "is_release=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        # Merge commit: extract PR number and check the PR author.
+        PR_NUM=$(printf '%s' "$MSG" | grep -oE '#[0-9]+' | tr -d '#' | head -1)
+        if [ -n "$PR_NUM" ]; then
+          PR_AUTHOR=$(gh pr view "$PR_NUM" --repo "$REPO" --json author --jq '.author.login')
+          if [ "$PR_AUTHOR" = "$EXPECTED_BOT" ]; then
+            echo "Verified: PR #${PR_NUM} authored by $PR_AUTHOR"
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "::error::Release PR #${PR_NUM} authored by ${PR_AUTHOR}, expected ${EXPECTED_BOT}"
+          exit 1
+        fi
+        echo "::error::Could not verify release author (commit by ${AUTHOR}, no PR found)"
+        exit 1
