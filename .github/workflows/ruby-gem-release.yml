@@ -1,28 +1,37 @@
 name: Ruby Gem — Release
 
+# Triggered by consumer via push to main on the tracked version files.
+# Verifies the commit was authored by the release bot, reads the
+# version from each gemspec, delegates to the tag-and-release composite,
+# then builds + attaches each gem to the Release.
+#
+# Companion to ruby-gem-prepare-release.yml: that workflow auto-merges
+# a "release: vX" commit touching version.rb files, which is what fires
+# this workflow.
+
 on:
   workflow_call:
     inputs:
-      gem_name:
-        description: Gem name (must match gemspec filename without extension)
+      gem_specs:
+        description: "Newline-separated list of gem names (without .gemspec). Multi-gem releases require all gemspec versions to match."
         required: true
         type: string
       ruby_version:
-        description: Ruby version for the runner
+        description: "Ruby version for the runner"
         required: false
         type: string
-        default: '4.0'
+        default: "4.0"
     secrets:
       FLUENCE_RELEASE_BOT_PRIVATE_KEY:
-        description: |
-          Private key of the release GitHub App. When provided, the
-          GitHub Release is created with the App's installation token
-          so the `release: published` event triggers downstream
-          workflows (e.g. `publish.yml` pushing the gem to GitHub
-          Packages). When omitted, falls back to GITHUB_TOKEN — the
-          Release is created but `publish.yml` won't auto-trigger
-          (GitHub blocks downstream events from GITHUB_TOKEN actions).
-        required: false
+        description: "Private key of the release GitHub App. Used to verify the release author and to emit the release-published event that triggers downstream publish workflows."
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -33,11 +42,64 @@ jobs:
       packages: read
 
     steps:
+      - id: app-token
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v5
+        with:
+          client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
+
+      - name: Verify release was authored by the release bot
+        id: verify
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXPECTED_BOT: ${{ steps.app-token.outputs.app-slug }}[bot]
+          AUTHOR: ${{ github.event.head_commit.author.name }}
+          MSG: ${{ github.event.head_commit.message }}
+          REPO: ${{ github.repository }}
+        run: |
+          # The version.rb / CHANGELOG.md paths filter on the consumer's
+          # release.yml also fires for feature/chore merges that happen
+          # to touch those files (e.g. retro-cleanup, style fixes). Skip
+          # cleanly when the commit message does not look like a release
+          # — the auth check stays loud for anything that does.
+          case "$MSG" in
+            "release: v"*|*"from "*"/release/v"*) : ;;
+            *)
+              echo "Not a release commit, skipping subsequent steps."
+              echo "is_release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+
+          # Squash merge: commit author is the bot directly.
+          if [ "$AUTHOR" = "$EXPECTED_BOT" ]; then
+            echo "Verified: commit authored by $AUTHOR"
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Merge commit: extract PR number and check the PR author.
+          PR_NUM=$(printf '%s' "$MSG" | grep -oE '#[0-9]+' | tr -d '#' | head -1)
+          if [ -n "$PR_NUM" ]; then
+            PR_AUTHOR=$(gh pr view "$PR_NUM" --repo "$REPO" --json author --jq '.author.login')
+            if [ "$PR_AUTHOR" = "$EXPECTED_BOT" ]; then
+              echo "Verified: PR #${PR_NUM} authored by $PR_AUTHOR"
+              echo "is_release=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error::Release PR #${PR_NUM} authored by ${PR_AUTHOR}, expected ${EXPECTED_BOT}"
+            exit 1
+          fi
+          echo "::error::Could not verify release author (commit by ${AUTHOR}, no PR found)"
+          exit 1
+
       - uses: actions/checkout@v6
+        if: steps.verify.outputs.is_release == 'true'
         with:
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
 
       - uses: ruby/setup-ruby@v1
+        if: steps.verify.outputs.is_release == 'true'
         env:
           # Authenticate `bundle install` (triggered by bundler-cache: true)
           # against GitHub Packages so private Fluence gems (e.g.
@@ -49,74 +111,63 @@ jobs:
           ruby-version: ${{ inputs.ruby_version }}
           bundler-cache: true
 
-      - id: app-token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v3
+      - uses: fluence-eu/ci-workflows/actions/setup-release-bot-git@v5
+        if: steps.verify.outputs.is_release == 'true'
         with:
-          client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
-          private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
+          app-token: ${{ steps.app-token.outputs.token }}
+          app-slug: ${{ steps.app-token.outputs.app-slug }}
 
-      - name: Get version from gemspec
+      - name: Read version from gemspec(s) and verify sync
         id: version
+        if: steps.verify.outputs.is_release == 'true'
         env:
-          GEM_NAME: ${{ inputs.gem_name }}
+          GEM_SPECS: ${{ inputs.gem_specs }}
         run: |
-          VERSION=$(ruby -e "puts Gem::Specification.load('${GEM_NAME}.gemspec').version")
-          if [[ -z "$VERSION" ]]; then
-            echo "ERROR: could not load version from ${GEM_NAME}.gemspec" >&2
+          set -euo pipefail
+          REFERENCE=""
+          GEM_NAMES=""
+          while IFS= read -r line; do
+            line="$(echo "$line" | xargs)"
+            [ -z "$line" ] && continue
+            GEM_NAME="${line%%:*}"
+            if [ ! -f "${GEM_NAME}.gemspec" ]; then
+              echo "::error::Gemspec not found: ${GEM_NAME}.gemspec"
+              exit 1
+            fi
+            CURRENT=$(ruby -e "puts Gem::Specification.load('${GEM_NAME}.gemspec').version")
+            if [ -z "$REFERENCE" ]; then
+              REFERENCE="$CURRENT"
+            elif [ "$CURRENT" != "$REFERENCE" ]; then
+              echo "::error::Version mismatch: ${GEM_NAME} = ${CURRENT}, expected ${REFERENCE}"
+              exit 1
+            fi
+            GEM_NAMES="${GEM_NAMES}${GEM_NAME} "
+          done <<< "$GEM_SPECS"
+          if [ -z "$REFERENCE" ]; then
+            echo "::error::No gem_specs provided."
             exit 1
           fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v${REFERENCE}" >> "$GITHUB_OUTPUT"
+          echo "gem_names=${GEM_NAMES}" >> "$GITHUB_OUTPUT"
 
-      - name: Check if tag already exists
-        id: check
-        run: |
-          git fetch --tags
-          if git rev-parse "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
-            # Path-filtered triggers fire on any commit that touches
-            # version.rb — including style fixes that don't actually
-            # bump the constant. When that happens we hit a tag that
-            # already exists; skip the rest of the job rather than
-            # 422-ing on `gh release create`.
-            echo "::notice::Tag ${{ steps.version.outputs.tag }} already exists — skipping release (version.rb modified without a bump)."
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
+      - uses: fluence-eu/ci-workflows/actions/tag-and-release@v5
+        id: tag
+        if: steps.verify.outputs.is_release == 'true'
+        with:
+          tag: ${{ steps.version.outputs.tag }}
+          notes-source: changelog
+          changelog-path: CHANGELOG.md
+          app-token: ${{ steps.app-token.outputs.token }}
 
-      - name: Create tag
-        if: steps.check.outputs.exists == 'false'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}"
-          git push origin "${{ steps.version.outputs.tag }}"
-
-      - name: Extract changelog for version
-        if: steps.check.outputs.exists == 'false'
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          awk "/^## \[$VERSION\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md > release-notes.md
-
-      - name: Create GitHub Release
-        if: steps.check.outputs.exists == 'false'
+      - name: Build and attach gems
+        if: steps.verify.outputs.is_release == 'true' && steps.tag.outputs.skipped == 'false'
         env:
-          # App token (when forwarded) emits release events that trigger
-          # downstream `publish.yml`. Falls back to GITHUB_TOKEN when no
-          # App key was passed — Release still gets created, just no
-          # auto-publish.
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          GEM_NAMES: ${{ steps.version.outputs.gem_names }}
         run: |
-          gh release create ${{ steps.version.outputs.tag }} \
-            --title "${{ steps.version.outputs.tag }}" \
-            --notes-file release-notes.md
-
-      - name: Build gem
-        if: steps.check.outputs.exists == 'false'
-        run: gem build ${{ inputs.gem_name }}.gemspec
-
-      - name: Attach gem to release
-        if: steps.check.outputs.exists == 'false'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ steps.version.outputs.tag }} ${{ inputs.gem_name }}-*.gem --clobber
+          set -euo pipefail
+          for GEM_NAME in $GEM_NAMES; do
+            gem build "${GEM_NAME}.gemspec"
+            gh release upload "$TAG" "${GEM_NAME}"-*.gem --clobber
+          done
