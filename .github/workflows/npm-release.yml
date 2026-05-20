@@ -1,0 +1,160 @@
+name: NPM — Release
+
+# Triggered by consumer via push to main with a paths filter on the
+# tracked package.json (single or first multi-package entry). Verifies
+# the commit was authored by the release bot, reads the version from
+# package.json, then delegates to the tag-and-release composite.
+#
+# Companion to npm-prepare-release.yml: that workflow auto-merges a
+# "release: vX" commit touching package.json, which is what fires
+# this workflow.
+#
+# Pattern target: npm packages on GitHub Packages (or any registry
+# the consumer wires up downstream via the published release event).
+
+on:
+  workflow_call:
+    inputs:
+      package_paths:
+        description: "Newline-separated list of package.json paths to read the version from. The first one is the source of truth; the others must match (else fail). Defaults to a mono-repo single root package.json."
+        required: false
+        type: string
+        default: |
+          package.json
+      notes_source:
+        description: "Release notes source forwarded to tag-and-release: 'auto' | 'changelog' | 'file'. Defaults to 'auto' (GitHub auto-generated)."
+        required: false
+        type: string
+        default: auto
+      changelog_path:
+        description: "Path to CHANGELOG.md when notes_source is 'changelog'."
+        required: false
+        type: string
+        default: CHANGELOG.md
+      notes_file:
+        description: "Path to a pre-written notes file when notes_source is 'file'."
+        required: false
+        type: string
+        default: ""
+    secrets:
+      FLUENCE_RELEASE_BOT_PRIVATE_KEY:
+        description: Private key of the GitHub App. Used to verify the release author and to emit the release-published event that triggers downstream publish workflows.
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - id: app-token
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v5
+        with:
+          client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
+
+      - name: Verify release was authored by the release bot
+        id: verify
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXPECTED_BOT: ${{ steps.app-token.outputs.app-slug }}[bot]
+          AUTHOR: ${{ github.event.head_commit.author.name }}
+          MSG: ${{ github.event.head_commit.message }}
+          REPO: ${{ github.repository }}
+        run: |
+          # The package.json paths filter on the consumer's release.yml
+          # also fires for any feature/chore merge that happens to touch
+          # the file (e.g. dependency bumps). Skip cleanly in that case
+          # so the run shows as success rather than a red "failed verify"
+          # — the auth check stays loud for anything that actually looks
+          # like a release commit.
+          case "$MSG" in
+            "release: v"*|*"from "*"/release/v"*) : ;;
+            *)
+              echo "Not a release commit, skipping subsequent steps."
+              echo "is_release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+
+          # Squash merge: commit author is the bot directly.
+          if [ "$AUTHOR" = "$EXPECTED_BOT" ]; then
+            echo "Verified: commit authored by $AUTHOR"
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Merge commit: extract PR number and check the PR author.
+          PR_NUM=$(printf '%s' "$MSG" | grep -oE '#[0-9]+' | tr -d '#' | head -1)
+          if [ -n "$PR_NUM" ]; then
+            PR_AUTHOR=$(gh pr view "$PR_NUM" --repo "$REPO" --json author --jq '.author.login')
+            if [ "$PR_AUTHOR" = "$EXPECTED_BOT" ]; then
+              echo "Verified: PR #${PR_NUM} authored by $PR_AUTHOR"
+              echo "is_release=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error::Release PR #${PR_NUM} authored by ${PR_AUTHOR}, expected ${EXPECTED_BOT}"
+            exit 1
+          fi
+          echo "::error::Could not verify release author (commit by ${AUTHOR}, no PR found)"
+          exit 1
+
+      - uses: actions/checkout@v6
+        if: steps.verify.outputs.is_release == 'true'
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - uses: fluence-eu/ci-workflows/actions/setup-release-bot-git@v5
+        if: steps.verify.outputs.is_release == 'true'
+        with:
+          app-token: ${{ steps.app-token.outputs.token }}
+          app-slug: ${{ steps.app-token.outputs.app-slug }}
+
+      - name: Read version from package.json (and verify all paths match)
+        id: version
+        if: steps.verify.outputs.is_release == 'true'
+        env:
+          PACKAGE_PATHS: ${{ inputs.package_paths }}
+        run: |
+          set -euo pipefail
+          REFERENCE=""
+          while IFS= read -r pkg; do
+            pkg="$(echo "$pkg" | xargs)"
+            [ -z "$pkg" ] && continue
+            if [ ! -f "$pkg" ]; then
+              echo "::error::package.json not found at: $pkg"
+              exit 1
+            fi
+            CURRENT=$(node -p "require('./$pkg').version")
+            if [ -z "$REFERENCE" ]; then
+              REFERENCE="$CURRENT"
+              continue
+            fi
+            if [ "$CURRENT" != "$REFERENCE" ]; then
+              echo "::error::Version mismatch: $pkg = $CURRENT, expected $REFERENCE"
+              exit 1
+            fi
+          done <<< "$PACKAGE_PATHS"
+          if [ -z "$REFERENCE" ]; then
+            echo "::error::No package.json paths provided."
+            exit 1
+          fi
+          echo "tag=v$REFERENCE" >> "$GITHUB_OUTPUT"
+
+      - uses: fluence-eu/ci-workflows/actions/tag-and-release@v5
+        if: steps.verify.outputs.is_release == 'true'
+        with:
+          tag: ${{ steps.version.outputs.tag }}
+          notes-source: ${{ inputs.notes_source }}
+          changelog-path: ${{ inputs.changelog_path }}
+          notes-file: ${{ inputs.notes_file }}
+          app-token: ${{ steps.app-token.outputs.token }}

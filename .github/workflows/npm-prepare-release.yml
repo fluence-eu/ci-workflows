@@ -1,0 +1,165 @@
+name: NPM — Prepare Release PR
+
+# Bumps the version field in one or more package.json files, refreshes
+# package-lock.json, opens an auto-merged PR. Companion to npm-release.yml:
+# the auto-merged "release: vX" commit fires the release pipeline.
+#
+# Mono-repo: pass `package_paths: package.json` (default).
+# Multi-package monorepo: pass a multiline list of paths.
+#
+# Optional `cross_pin_dependency`: when set to a npm package name, that
+# dep is pinned to the new version in every `package_paths` entry that
+# declares it. Use this when one workspace package depends on another
+# in the same monorepo and you want them released as a tight pair (e.g.
+# a UI package importing an internal API from a sibling).
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "New version (semver, no v prefix, e.g. 1.0.0)"
+        required: true
+        type: string
+      package_paths:
+        description: "Newline-separated list of package.json paths to bump. Defaults to a mono-repo single root package.json."
+        required: false
+        type: string
+        default: |
+          package.json
+      cross_pin_dependency:
+        description: "Optional npm package name to pin to `version` in every package_paths entry that declares it. Empty = no cross-pin."
+        required: false
+        type: string
+        default: ""
+      node_version:
+        description: "Node version for the runner"
+        required: false
+        type: string
+        default: "22"
+    secrets:
+      FLUENCE_RELEASE_BOT_PRIVATE_KEY:
+        description: Private key of the GitHub App that opens + auto-merges the release PR
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare Release PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - id: app-token
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v5
+        with:
+          client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - uses: fluence-eu/ci-workflows/actions/setup-release-bot-git@v5
+        with:
+          app-token: ${{ steps.app-token.outputs.token }}
+          app-slug: ${{ steps.app-token.outputs.app-slug }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Validate semver
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$'; then
+            echo "::error::Invalid semver: $VERSION"
+            exit 1
+          fi
+
+      - name: Bump version in package.json paths
+        env:
+          VERSION: ${{ inputs.version }}
+          PACKAGE_PATHS: ${{ inputs.package_paths }}
+          CROSS_PIN: ${{ inputs.cross_pin_dependency }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r pkg; do
+            pkg="$(echo "$pkg" | xargs)"  # trim
+            [ -z "$pkg" ] && continue
+            if [ ! -f "$pkg" ]; then
+              echo "::error::package.json not found at: $pkg"
+              exit 1
+            fi
+            echo "Bumping $pkg → $VERSION"
+            node -e "
+              const fs = require('fs');
+              const path = process.argv[1];
+              const version = process.argv[2];
+              const crossPin = process.argv[3];
+              const json = JSON.parse(fs.readFileSync(path, 'utf-8'));
+              json.version = version;
+              if (crossPin && json.dependencies && json.dependencies[crossPin]) {
+                json.dependencies[crossPin] = version;
+              }
+              fs.writeFileSync(path, JSON.stringify(json, null, 2) + '\n');
+            " "$pkg" "$VERSION" "$CROSS_PIN"
+          done <<< "$PACKAGE_PATHS"
+
+      - name: Refresh package-lock.json
+        run: npm install --package-lock-only
+
+      - name: Create release branch + push
+        id: branch
+        env:
+          VERSION: ${{ inputs.version }}
+          PACKAGE_PATHS: ${{ inputs.package_paths }}
+        run: |
+          set -euo pipefail
+          BRANCH="release/v$VERSION"
+          git checkout -b "$BRANCH"
+          # Stage every bumped package.json plus the refreshed lock.
+          while IFS= read -r pkg; do
+            pkg="$(echo "$pkg" | xargs)"
+            [ -z "$pkg" ] && continue
+            git add "$pkg"
+          done <<< "$PACKAGE_PATHS"
+          [ -f package-lock.json ] && git add package-lock.json
+          git commit -m "release: v$VERSION"
+          git push -u origin "$BRANCH"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Create release PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ inputs.version }}
+          PACKAGE_PATHS: ${{ inputs.package_paths }}
+        run: |
+          set -euo pipefail
+          # Build a human-friendly bullet list of affected packages.
+          PACKAGES_LIST=$(while IFS= read -r pkg; do
+            pkg="$(echo "$pkg" | xargs)"
+            [ -z "$pkg" ] && continue
+            name=$(node -p "require('./$pkg').name")
+            printf -- '- `%s` → `v%s`\n' "$name" "$VERSION"
+          done <<< "$PACKAGE_PATHS")
+          BODY=$(printf 'Version bump for npm package(s):\n\n%s\n\nAuto-merged once required checks pass.' "$PACKAGES_LIST")
+          PR_URL=$(gh pr create \
+            --base main \
+            --title "release: v$VERSION" \
+            --body "$BODY")
+          echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
+
+      - uses: fluence-eu/ci-workflows/actions/automerge-pr-with-retry@v5
+        with:
+          pr-url: ${{ steps.pr.outputs.url }}
+          app-token: ${{ steps.app-token.outputs.token }}
