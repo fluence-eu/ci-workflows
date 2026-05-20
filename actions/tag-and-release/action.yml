@@ -1,0 +1,141 @@
+name: Tag and create GitHub Release
+description: |
+  Idempotent tag + Release creation. The two release-style reusable
+  workflows (`app-release.yml`, `ruby-gem-release.yml`) and the
+  upcoming `npm-release.yml` all duplicate the same steps:
+
+    1. Check whether the tag already exists (and on which commit).
+    2. Create + push the tag when it doesn't.
+    3. Create a GitHub Release with notes from CHANGELOG / auto-gen / file.
+
+  This composite folds those steps into one call and skips cleanly
+  when the tag already exists on the current commit (re-runs and
+  path-filtered triggers that re-fire on non-bump commits no longer
+  crash with "tag already exists").
+
+  Fails (`exit 1`) if the tag exists but points to a DIFFERENT commit
+  than HEAD — that means the tag was created out-of-band and the
+  workflow should not silently fast-forward a release marker.
+
+  Uses the App token when forwarded (so the `release: published`
+  event triggers downstream workflows like `publish.yml`); falls
+  back to GITHUB_TOKEN otherwise.
+
+inputs:
+  tag:
+    description: Tag to create and release (e.g. `v1.2.3`).
+    required: true
+  title:
+    description: Release title. Defaults to the tag.
+    required: false
+    default: ""
+  notes-source:
+    description: "Where to source release notes. 'auto' uses --generate-notes; 'changelog' extracts the section for this version from a CHANGELOG.md; 'file' reads from notes-file."
+    required: false
+    default: auto
+  notes-file:
+    description: "Path to a pre-written notes file. Used only when notes-source is 'file'."
+    required: false
+    default: ""
+  changelog-path:
+    description: "Path to the changelog. Used only when notes-source is 'changelog'."
+    required: false
+    default: CHANGELOG.md
+  app-token:
+    description: "GitHub App installation token. When set, the Release is created with this token so the release-published event can trigger downstream workflows. Falls back to GITHUB_TOKEN."
+    required: false
+    default: ""
+
+outputs:
+  skipped:
+    description: "`true` when the tag already existed on HEAD and the action was a no-op."
+    value: ${{ steps.tag.outputs.skipped }}
+
+runs:
+  using: composite
+  steps:
+    - id: tag
+      name: Create and push tag (or skip if it already exists)
+      shell: bash
+      env:
+        TAG: ${{ inputs.tag }}
+      run: |
+        git fetch --tags origin
+        if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null 2>&1; then
+          EXISTING=$(git rev-parse "refs/tags/${TAG}^{commit}")
+          CURRENT=$(git rev-parse HEAD)
+          if [ "$EXISTING" != "$CURRENT" ]; then
+            echo "::error::Tag ${TAG} exists but points to ${EXISTING}, expected ${CURRENT}"
+            exit 1
+          fi
+          echo "Tag ${TAG} already exists on HEAD, skipping."
+          echo "skipped=true" >> "$GITHUB_OUTPUT"
+        else
+          git tag -a "${TAG}" -m "Release ${TAG}"
+          git push origin "${TAG}"
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - id: notes
+      if: steps.tag.outputs.skipped == 'false'
+      name: Resolve release notes
+      shell: bash
+      env:
+        TAG: ${{ inputs.tag }}
+        NOTES_SOURCE: ${{ inputs.notes-source }}
+        NOTES_FILE: ${{ inputs.notes-file }}
+        CHANGELOG_PATH: ${{ inputs.changelog-path }}
+      run: |
+        case "$NOTES_SOURCE" in
+          auto)
+            echo "args=--generate-notes" >> "$GITHUB_OUTPUT"
+            ;;
+          file)
+            if [ -z "$NOTES_FILE" ] || [ ! -s "$NOTES_FILE" ]; then
+              echo "::error::notes-source=file but notes-file is empty or missing: '$NOTES_FILE'"
+              exit 1
+            fi
+            echo "args=--notes-file $NOTES_FILE" >> "$GITHUB_OUTPUT"
+            ;;
+          changelog)
+            VERSION="${TAG#v}"
+            SAFE_VERSION="$(printf '%s\n' "$VERSION" | sed 's/[][\\/.^$*+?{}|()]/\\&/g')"
+            if [ ! -f "$CHANGELOG_PATH" ]; then
+              echo "::warning::changelog not found at ${CHANGELOG_PATH}, falling back to 'Release ${TAG}'"
+              echo "Release ${TAG}" > /tmp/release-notes.md
+            else
+              awk "/^## \[$SAFE_VERSION\]/{flag=1; next} /^## \[/{flag=0} flag" "$CHANGELOG_PATH" > /tmp/release-notes.md
+              if [ ! -s /tmp/release-notes.md ]; then
+                echo "::warning::no section found for ${VERSION} in ${CHANGELOG_PATH}, falling back to 'Release ${TAG}'"
+                echo "Release ${TAG}" > /tmp/release-notes.md
+              fi
+            fi
+            echo "args=--notes-file /tmp/release-notes.md" >> "$GITHUB_OUTPUT"
+            ;;
+          *)
+            echo "::error::Invalid notes-source '$NOTES_SOURCE'. Use auto | changelog | file."
+            exit 1
+            ;;
+        esac
+
+    - name: Create GitHub Release
+      if: steps.tag.outputs.skipped == 'false'
+      shell: bash
+      env:
+        # App token forwarded when provided — emits release events that
+        # can trigger downstream publish workflows. GITHUB_TOKEN-issued
+        # releases do not trigger workflow runs (GitHub anti-loop rule).
+        GH_TOKEN: ${{ inputs.app-token != '' && inputs.app-token || github.token }}
+        TAG: ${{ inputs.tag }}
+        TITLE: ${{ inputs.title }}
+        NOTES_ARGS: ${{ steps.notes.outputs.args }}
+      run: |
+        TITLE="${TITLE:-$TAG}"
+        # Idempotent: a re-run after a partial failure (tag created but
+        # release create failed) should not crash on "release exists".
+        if gh release view "$TAG" >/dev/null 2>&1; then
+          echo "Release ${TAG} already exists, skipping creation."
+          exit 0
+        fi
+        # shellcheck disable=SC2086
+        gh release create "$TAG" --title "$TITLE" $NOTES_ARGS
