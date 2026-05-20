@@ -79,38 +79,11 @@ jobs:
           app-token: ${{ steps.app-token.outputs.token }}
           app-slug: ${{ steps.app-token.outputs.app-slug }}
 
-      - name: Read version from gemspec(s) and verify sync
-        id: version
+      - id: version
         if: steps.verify.outputs.is_release == 'true'
-        env:
-          GEM_SPECS: ${{ inputs.gem_specs }}
-        run: |
-          set -euo pipefail
-          REFERENCE=""
-          GEM_NAMES=""
-          while IFS= read -r line; do
-            line="$(echo "$line" | xargs)"
-            [ -z "$line" ] && continue
-            GEM_NAME="${line%%:*}"
-            if [ ! -f "${GEM_NAME}.gemspec" ]; then
-              echo "::error::Gemspec not found: ${GEM_NAME}.gemspec"
-              exit 1
-            fi
-            CURRENT=$(ruby -e "puts Gem::Specification.load('${GEM_NAME}.gemspec').version")
-            if [ -z "$REFERENCE" ]; then
-              REFERENCE="$CURRENT"
-            elif [ "$CURRENT" != "$REFERENCE" ]; then
-              echo "::error::Version mismatch: ${GEM_NAME} = ${CURRENT}, expected ${REFERENCE}"
-              exit 1
-            fi
-            GEM_NAMES="${GEM_NAMES}${GEM_NAME} "
-          done <<< "$GEM_SPECS"
-          if [ -z "$REFERENCE" ]; then
-            echo "::error::No gem_specs provided."
-            exit 1
-          fi
-          echo "tag=v${REFERENCE}" >> "$GITHUB_OUTPUT"
-          echo "gem_names=${GEM_NAMES}" >> "$GITHUB_OUTPUT"
+        uses: fluence-eu/ci-workflows/actions/read-and-verify-ruby-gem-versions@v5
+        with:
+          gem-specs: ${{ inputs.gem_specs }}
 
       - uses: fluence-eu/ci-workflows/actions/tag-and-release@v5
         id: tag

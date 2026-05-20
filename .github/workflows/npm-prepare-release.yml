@@ -102,24 +102,13 @@ jobs:
           OUTPUT: CHANGELOG.md
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create release branch + push
-        env:
-          TAG: ${{ steps.bump.outputs.tag }}
-          PACKAGE_PATHS: ${{ inputs.package_paths }}
-        run: |
-          set -euo pipefail
-          BRANCH="release/${TAG}"
-          git checkout -b "$BRANCH"
-          # Stage every bumped package.json plus the refreshed lock + changelog.
-          while IFS= read -r pkg; do
-            pkg="$(echo "$pkg" | xargs)"
-            [ -z "$pkg" ] && continue
-            git add "$pkg"
-          done <<< "$PACKAGE_PATHS"
-          [ -f package-lock.json ] && git add package-lock.json
-          [ -f CHANGELOG.md ] && git add CHANGELOG.md
-          git commit -m "release: ${TAG}"
-          git push -u origin "$BRANCH"
+      - uses: fluence-eu/ci-workflows/actions/commit-release-branch@v5
+        with:
+          tag: ${{ steps.bump.outputs.tag }}
+          files-to-stage: |
+            ${{ inputs.package_paths }}
+            package-lock.json
+            CHANGELOG.md
 
       - name: Create release PR
         id: pr

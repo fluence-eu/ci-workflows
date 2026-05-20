@@ -91,22 +91,12 @@ jobs:
           OUTPUT: CHANGELOG.md
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create release branch + push
-        id: branch
-        env:
-          TAG: ${{ steps.bump.outputs.tag }}
-          VERSION_FILES: ${{ steps.bump.outputs.version_files }}
-        run: |
-          set -euo pipefail
-          BRANCH="release/${TAG}"
-          git checkout -b "$BRANCH"
-          while IFS= read -r f; do
-            [ -z "$f" ] && continue
-            git add "$f"
-          done <<< "$VERSION_FILES"
-          [ -f CHANGELOG.md ] && git add CHANGELOG.md
-          git commit -m "release: ${TAG}"
-          git push -u origin "$BRANCH"
+      - uses: fluence-eu/ci-workflows/actions/commit-release-branch@v5
+        with:
+          tag: ${{ steps.bump.outputs.tag }}
+          files-to-stage: |
+            ${{ steps.bump.outputs.version_files }}
+            CHANGELOG.md
 
       - name: Create release PR
         id: pr

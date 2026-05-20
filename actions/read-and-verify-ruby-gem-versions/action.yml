@@ -1,0 +1,62 @@
+name: Read and verify Ruby gem versions
+description: |
+  Reads the `version` from one or more `.gemspec` files and verifies
+  they all match (multi-gem releases require synced versions). Outputs
+  the shared version, the corresponding tag, and the space-separated
+  list of gem names (parsed from the `gem-specs` input, stripping any
+  optional `:version-file` overrides).
+
+  Used at release-time by `ruby-gem-release.yml` and internally by
+  `bump-ruby-gem-versions` (which then writes the bumped value back).
+
+inputs:
+  gem-specs:
+    description: 'Newline-separated list of gem names (without .gemspec). Optional ":path/to/version.rb" override per line is tolerated and stripped here.'
+    required: true
+
+outputs:
+  version:
+    description: "The shared current version (semver, no v prefix)."
+    value: ${{ steps.read.outputs.version }}
+  tag:
+    description: "The corresponding tag (v-prefixed semver)."
+    value: ${{ steps.read.outputs.tag }}
+  gem_names:
+    description: "Space-separated list of gem names (without .gemspec), in input order. Useful downstream for `gem build` / `gh release upload` loops."
+    value: ${{ steps.read.outputs.gem_names }}
+
+runs:
+  using: composite
+  steps:
+    - id: read
+      shell: bash
+      env:
+        GEM_SPECS: ${{ inputs.gem-specs }}
+      run: |
+        set -euo pipefail
+        REFERENCE=""
+        GEM_NAMES=""
+        while IFS= read -r line; do
+          line="$(echo "$line" | xargs)"
+          [ -z "$line" ] && continue
+          GEM_NAME="${line%%:*}"
+          if [ ! -f "${GEM_NAME}.gemspec" ]; then
+            echo "::error::Gemspec not found: ${GEM_NAME}.gemspec"
+            exit 1
+          fi
+          CURRENT=$(ruby -e "puts Gem::Specification.load('${GEM_NAME}.gemspec').version")
+          if [ -z "$REFERENCE" ]; then
+            REFERENCE="$CURRENT"
+          elif [ "$CURRENT" != "$REFERENCE" ]; then
+            echo "::error::Version mismatch: ${GEM_NAME} = ${CURRENT}, expected ${REFERENCE}. Multi-gem releases require synced versions."
+            exit 1
+          fi
+          GEM_NAMES="${GEM_NAMES}${GEM_NAME} "
+        done <<< "$GEM_SPECS"
+        if [ -z "$REFERENCE" ]; then
+          echo "::error::No gem_specs provided."
+          exit 1
+        fi
+        echo "version=${REFERENCE}" >> "$GITHUB_OUTPUT"
+        echo "tag=v${REFERENCE}" >> "$GITHUB_OUTPUT"
+        echo "gem_names=${GEM_NAMES}" >> "$GITHUB_OUTPUT"

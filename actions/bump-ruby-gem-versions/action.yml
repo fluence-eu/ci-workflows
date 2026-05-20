@@ -2,9 +2,10 @@ name: Bump Ruby gem versions
 description: |
   Computes the next version (patch|minor|major) from the current shared
   version of one or more gems, then writes it back to each `version.rb`.
-  Verifies that every listed gem is on the same starting version before
-  bumping — multi-gem releases under a single tag require synced
-  versions.
+  The read-and-verify-sync step is delegated to the
+  `read-and-verify-ruby-gem-versions` composite so that the same logic
+  serves both prepare-release (this composite, with a write) and
+  release-time (the read composite alone).
 
   Each entry in `gem-specs` is either a gem name (e.g. `fluence-foo`)
   for which the version file is auto-derived via the Bundler convention
@@ -25,71 +26,33 @@ inputs:
 outputs:
   version:
     description: "The new version (semver, no v prefix)."
-    value: ${{ steps.bump.outputs.version }}
+    value: ${{ steps.write.outputs.version }}
   tag:
     description: "The new tag (v-prefixed semver)."
-    value: ${{ steps.bump.outputs.tag }}
+    value: ${{ steps.write.outputs.tag }}
   version_files:
     description: "Newline-separated list of version.rb paths actually written to. Useful to git-add downstream without re-deriving from gem-specs."
-    value: ${{ steps.bump.outputs.version_files }}
+    value: ${{ steps.write.outputs.version_files }}
 
 runs:
   using: composite
   steps:
-    - id: bump
+    - id: read
+      uses: fluence-eu/ci-workflows/actions/read-and-verify-ruby-gem-versions@v5
+      with:
+        gem-specs: ${{ inputs.gem-specs }}
+
+    - id: write
       shell: bash
       env:
         BUMP: ${{ inputs.bump }}
         GEM_SPECS: ${{ inputs.gem-specs }}
+        CURRENT: ${{ steps.read.outputs.version }}
       run: |
         set -euo pipefail
 
-        # First pass: parse gem_specs, derive version_files, verify
-        # every current version is identical (otherwise a multi-gem
-        # release would be ambiguous).
-        declare -a GEMS=() FILES=()
-        REFERENCE=""
-        while IFS= read -r line; do
-          line="$(echo "$line" | xargs)"  # trim
-          [ -z "$line" ] && continue
-
-          if [[ "$line" == *:* ]]; then
-            GEM_NAME="${line%%:*}"
-            VERSION_FILE="${line#*:}"
-          else
-            GEM_NAME="$line"
-            # Bundler default convention: lib/<gem name with - as />/version.rb
-            VERSION_FILE="lib/$(echo "$GEM_NAME" | tr '-' '/')/version.rb"
-          fi
-
-          if [ ! -f "${GEM_NAME}.gemspec" ]; then
-            echo "::error::Gemspec not found: ${GEM_NAME}.gemspec"
-            exit 1
-          fi
-          if [ ! -f "$VERSION_FILE" ]; then
-            echo "::error::version file not found: ${VERSION_FILE} (derived for ${GEM_NAME})"
-            exit 1
-          fi
-
-          CURRENT=$(ruby -e "puts Gem::Specification.load('${GEM_NAME}.gemspec').version")
-          if [ -z "$REFERENCE" ]; then
-            REFERENCE="$CURRENT"
-          elif [ "$CURRENT" != "$REFERENCE" ]; then
-            echo "::error::Version mismatch: ${GEM_NAME} = ${CURRENT}, expected ${REFERENCE}. Multi-gem releases require synced versions."
-            exit 1
-          fi
-
-          GEMS+=("$GEM_NAME")
-          FILES+=("$VERSION_FILE")
-        done <<< "$GEM_SPECS"
-
-        if [ "${#GEMS[@]}" -eq 0 ]; then
-          echo "::error::No gem_specs provided."
-          exit 1
-        fi
-
-        # Compute the new version once from the shared current.
-        IFS='.' read -r MAJOR MINOR PATCH <<< "$REFERENCE"
+        # Compute the new version from the shared current.
+        IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
         case "$BUMP" in
           patch) PATCH=$((PATCH + 1)) ;;
           minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
@@ -97,22 +60,35 @@ runs:
           *) echo "::error::Invalid bump type '$BUMP'. Use patch, minor, or major." ; exit 1 ;;
         esac
         NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
-        echo "Bumping ${#GEMS[@]} gem(s) from ${REFERENCE} → ${NEW_VERSION}"
+        echo "Bumping from ${CURRENT} → ${NEW_VERSION}"
 
-        # Second pass: rewrite each VERSION constant.
-        for i in "${!GEMS[@]}"; do
-          FILE="${FILES[$i]}"
-          sed -i.bak "s/VERSION = '${REFERENCE}'/VERSION = '${NEW_VERSION}'/" "$FILE"
-          rm -f "${FILE}.bak"
-          if ! grep -q "VERSION = '${NEW_VERSION}'" "$FILE"; then
-            echo "::error::Version bump did not apply to ${FILE}"
+        # Derive each version file from the gem-specs entry (`:override`
+        # syntax wins; otherwise Bundler convention).
+        declare -a FILES=()
+        while IFS= read -r line; do
+          line="$(echo "$line" | xargs)"
+          [ -z "$line" ] && continue
+          if [[ "$line" == *:* ]]; then
+            VERSION_FILE="${line#*:}"
+          else
+            VERSION_FILE="lib/$(echo "$line" | tr '-' '/')/version.rb"
+          fi
+          if [ ! -f "$VERSION_FILE" ]; then
+            echo "::error::version file not found: ${VERSION_FILE} (derived for ${line%%:*})"
             exit 1
           fi
-        done
+          sed -i.bak "s/VERSION = '${CURRENT}'/VERSION = '${NEW_VERSION}'/" "$VERSION_FILE"
+          rm -f "${VERSION_FILE}.bak"
+          if ! grep -q "VERSION = '${NEW_VERSION}'" "$VERSION_FILE"; then
+            echo "::error::Version bump did not apply to ${VERSION_FILE}"
+            exit 1
+          fi
+          FILES+=("$VERSION_FILE")
+        done <<< "$GEM_SPECS"
 
         echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
         echo "tag=v${NEW_VERSION}" >> "$GITHUB_OUTPUT"
-        # Persist resolved version file list for the next steps.
+        # Persist resolved version file list for downstream consumers.
         {
           echo 'version_files<<EOF'
           printf '%s\n' "${FILES[@]}"
