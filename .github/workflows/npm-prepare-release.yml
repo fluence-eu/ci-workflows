@@ -6,7 +6,9 @@ name: NPM — Prepare Release PR
 # the auto-merged "release: vX" commit fires the release pipeline.
 #
 # Mono-repo: pass `package_paths: package.json` (default).
-# Multi-package monorepo: pass a multiline list of paths.
+# Multi-package monorepo: pass a multiline list. All listed packages
+# are released as a tightly-coupled set under one version — their
+# current versions MUST match (the workflow fails fast otherwise).
 #
 # Optional `cross_pin_dependency`: when set to a npm package name, that
 # dep is pinned to the new version in every `package_paths` entry that
@@ -21,8 +23,8 @@ name: NPM — Prepare Release PR
 on:
   workflow_call:
     inputs:
-      version:
-        description: "New version (semver, no v prefix, e.g. 1.0.0)"
+      bump:
+        description: "Version bump type (patch|minor|major). The current version is read from the first package.json and bumped accordingly."
         required: true
         type: string
       package_paths:
@@ -32,7 +34,7 @@ on:
         default: |
           package.json
       cross_pin_dependency:
-        description: "Optional npm package name to pin to `version` in every package_paths entry that declares it. Empty = no cross-pin."
+        description: "Optional npm package name to pin to the new version in every package_paths entry that declares it. Empty = no cross-pin."
         required: false
         type: string
         default: ""
@@ -81,22 +83,20 @@ jobs:
         with:
           node-version: ${{ inputs.node_version }}
 
-      - name: Validate semver
+      - name: Bump version across all packages (in sync)
+        id: bump
         env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$'; then
-            echo "::error::Invalid semver: $VERSION"
-            exit 1
-          fi
-
-      - name: Bump version in package.json paths
-        env:
-          VERSION: ${{ inputs.version }}
+          BUMP: ${{ inputs.bump }}
           PACKAGE_PATHS: ${{ inputs.package_paths }}
           CROSS_PIN: ${{ inputs.cross_pin_dependency }}
         run: |
           set -euo pipefail
+
+          # First pass: parse package_paths, verify every current version
+          # is identical (a multi-package release would be ambiguous
+          # otherwise).
+          declare -a PKGS=()
+          REFERENCE=""
           while IFS= read -r pkg; do
             pkg="$(echo "$pkg" | xargs)"  # trim
             [ -z "$pkg" ] && continue
@@ -104,7 +104,34 @@ jobs:
               echo "::error::package.json not found at: $pkg"
               exit 1
             fi
-            echo "Bumping $pkg → $VERSION"
+            CURRENT=$(node -p "require('./$pkg').version")
+            if [ -z "$REFERENCE" ]; then
+              REFERENCE="$CURRENT"
+            elif [ "$CURRENT" != "$REFERENCE" ]; then
+              echo "::error::Version mismatch: ${pkg} = ${CURRENT}, expected ${REFERENCE}. Multi-package releases require synced versions."
+              exit 1
+            fi
+            PKGS+=("$pkg")
+          done <<< "$PACKAGE_PATHS"
+
+          if [ "${#PKGS[@]}" -eq 0 ]; then
+            echo "::error::No package_paths provided."
+            exit 1
+          fi
+
+          # Compute the new version from the shared current.
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$REFERENCE"
+          case "$BUMP" in
+            patch) PATCH=$((PATCH + 1)) ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            *) echo "::error::Invalid bump type '$BUMP'. Use patch, minor, or major." ; exit 1 ;;
+          esac
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "Bumping ${#PKGS[@]} package(s) from ${REFERENCE} → ${NEW_VERSION}"
+
+          # Second pass: write the new version (and optional cross-pin).
+          for pkg in "${PKGS[@]}"; do
             node -e "
               const fs = require('fs');
               const path = process.argv[1];
@@ -116,8 +143,11 @@ jobs:
                 json.dependencies[crossPin] = version;
               }
               fs.writeFileSync(path, JSON.stringify(json, null, 2) + '\n');
-            " "$pkg" "$VERSION" "$CROSS_PIN"
-          done <<< "$PACKAGE_PATHS"
+            " "$pkg" "$NEW_VERSION" "$CROSS_PIN"
+          done
+
+          echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${NEW_VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Refresh package-lock.json
         run: npm install --package-lock-only
@@ -126,19 +156,18 @@ jobs:
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
-          args: --tag v${{ inputs.version }}
+          args: --tag ${{ steps.bump.outputs.tag }}
         env:
           OUTPUT: CHANGELOG.md
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create release branch + push
-        id: branch
         env:
-          VERSION: ${{ inputs.version }}
+          TAG: ${{ steps.bump.outputs.tag }}
           PACKAGE_PATHS: ${{ inputs.package_paths }}
         run: |
           set -euo pipefail
-          BRANCH="release/v$VERSION"
+          BRANCH="release/${TAG}"
           git checkout -b "$BRANCH"
           # Stage every bumped package.json plus the refreshed lock + changelog.
           while IFS= read -r pkg; do
@@ -148,15 +177,15 @@ jobs:
           done <<< "$PACKAGE_PATHS"
           [ -f package-lock.json ] && git add package-lock.json
           [ -f CHANGELOG.md ] && git add CHANGELOG.md
-          git commit -m "release: v$VERSION"
+          git commit -m "release: ${TAG}"
           git push -u origin "$BRANCH"
-          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
       - name: Create release PR
         id: pr
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          VERSION: ${{ inputs.version }}
+          TAG: ${{ steps.bump.outputs.tag }}
+          VERSION: ${{ steps.bump.outputs.version }}
           PACKAGE_PATHS: ${{ inputs.package_paths }}
         run: |
           set -euo pipefail
@@ -165,12 +194,12 @@ jobs:
             pkg="$(echo "$pkg" | xargs)"
             [ -z "$pkg" ] && continue
             name=$(node -p "require('./$pkg').name")
-            printf -- '- `%s` → `v%s`\n' "$name" "$VERSION"
+            printf -- '- `%s` → `%s`\n' "$name" "$TAG"
           done <<< "$PACKAGE_PATHS")
           BODY=$(printf 'Version bump for npm package(s):\n\n%s\n\nAuto-merged once required checks pass.' "$PACKAGES_LIST")
           PR_URL=$(gh pr create \
             --base main \
-            --title "release: v$VERSION" \
+            --title "release: ${TAG}" \
             --body "$BODY")
           echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
 
