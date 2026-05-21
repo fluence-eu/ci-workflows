@@ -9,6 +9,13 @@ name: NPM — Release
 # "release: vX" commit touching package.json, which is what fires
 # this workflow.
 #
+# After tagging, builds each package and attaches the resulting `.tgz`
+# tarballs to the GitHub Release. Symmetric with ruby-gem-release.yml
+# (`gem build` + `gh release upload .gem`). The companion
+# `npm-publish.yml` then downloads those tarballs and `npm publish`-es
+# them — guarantees the published artifact is byte-identical to what
+# is attached to the Release.
+#
 # Pattern target: npm packages on GitHub Packages (or any registry
 # the consumer wires up downstream via the published release event).
 
@@ -36,6 +43,16 @@ on:
         required: false
         type: string
         default: ""
+      node_version:
+        description: "Node version used to build the tarballs attached to the Release."
+        required: false
+        type: string
+        default: "22"
+      build_command:
+        description: "Command used to produce the dist/ output of each workspace before `npm pack`. Defaults to the workspace-aware build."
+        required: false
+        type: string
+        default: "npm run build --workspaces"
     secrets:
       FLUENCE_RELEASE_BOT_PRIVATE_KEY:
         description: Private key of the GitHub App. Used to verify the release author and to emit the release-published event that triggers downstream publish workflows.
@@ -94,3 +111,38 @@ jobs:
           changelog-path: ${{ inputs.changelog_path }}
           notes-file: ${{ inputs.notes_file }}
           app-token: ${{ steps.app-token.outputs.token }}
+
+      - uses: actions/setup-node@v6
+        if: steps.verify.outputs.is_release == 'true'
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Install dependencies and build
+        if: steps.verify.outputs.is_release == 'true'
+        env:
+          BUILD_CMD: ${{ inputs.build_command }}
+        run: |
+          npm ci
+          eval "$BUILD_CMD"
+
+      - name: Pack and attach tarballs to the release
+        if: steps.verify.outputs.is_release == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          PACKAGE_PATHS: ${{ inputs.package_paths }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r pkg; do
+            pkg="$(echo "$pkg" | xargs)"
+            [ -z "$pkg" ] && continue
+            dir="$(dirname "$pkg")"
+            # `npm pack --workspace <dir>` produces a tarball using the
+            # workspace's own `files` field, name, and version — exactly
+            # what `npm publish` would upload to the registry.
+            (cd "$dir" && npm pack --pack-destination "$GITHUB_WORKSPACE")
+          done <<< "$PACKAGE_PATHS"
+          # Upload every .tgz that npm pack just created. --clobber so a
+          # re-run of the release workflow overwrites the existing asset
+          # rather than failing on "asset already exists".
+          gh release upload "$TAG" *.tgz --clobber
