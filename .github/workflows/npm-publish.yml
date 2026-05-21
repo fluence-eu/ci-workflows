@@ -27,7 +27,7 @@ on:
         type: string
         default: "22"
       scope:
-        description: "npm scope used by setup-node to configure .npmrc. Defaults to `@${{ github.repository_owner }}` (which GitHub Packages requires — scope must match the repo owner). Override only for tests or non-standard hosts."
+        description: "npm scope used by setup-node to configure .npmrc. When left empty (default), the workflow resolves it to `@<repo-owner>` at runtime — GitHub Packages requires the scope to match the repo owner. Override only for tests or non-standard hosts."
         required: false
         type: string
         default: ""
@@ -50,7 +50,7 @@ on:
         type: string
         default: "22"
       scope:
-        description: "npm scope used by setup-node. Defaults to `@${{ github.repository_owner }}`."
+        description: "npm scope used by setup-node. Empty (default) → resolved to `@<repo-owner>` at runtime."
         required: false
         type: string
         default: ""
