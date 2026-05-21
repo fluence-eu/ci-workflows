@@ -48,49 +48,11 @@ jobs:
           client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
 
-      - name: Verify release was authored by the release bot
-        id: verify
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EXPECTED_BOT: ${{ steps.app-token.outputs.app-slug }}[bot]
-          AUTHOR: ${{ github.event.head_commit.author.name }}
-          MSG: ${{ github.event.head_commit.message }}
-          REPO: ${{ github.repository }}
-        run: |
-          # The version.rb / CHANGELOG.md paths filter on the consumer's
-          # release.yml also fires for feature/chore merges that happen
-          # to touch those files (e.g. retro-cleanup, style fixes). Skip
-          # cleanly when the commit message does not look like a release
-          # — the auth check stays loud for anything that does.
-          case "$MSG" in
-            "release: v"*|*"from "*"/release/v"*) : ;;
-            *)
-              echo "Not a release commit, skipping subsequent steps."
-              echo "is_release=false" >> "$GITHUB_OUTPUT"
-              exit 0
-              ;;
-          esac
-
-          # Squash merge: commit author is the bot directly.
-          if [ "$AUTHOR" = "$EXPECTED_BOT" ]; then
-            echo "Verified: commit authored by $AUTHOR"
-            echo "is_release=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # Merge commit: extract PR number and check the PR author.
-          PR_NUM=$(printf '%s' "$MSG" | grep -oE '#[0-9]+' | tr -d '#' | head -1)
-          if [ -n "$PR_NUM" ]; then
-            PR_AUTHOR=$(gh pr view "$PR_NUM" --repo "$REPO" --json author --jq '.author.login')
-            if [ "$PR_AUTHOR" = "$EXPECTED_BOT" ]; then
-              echo "Verified: PR #${PR_NUM} authored by $PR_AUTHOR"
-              echo "is_release=true" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            echo "::error::Release PR #${PR_NUM} authored by ${PR_AUTHOR}, expected ${EXPECTED_BOT}"
-            exit 1
-          fi
-          echo "::error::Could not verify release author (commit by ${AUTHOR}, no PR found)"
-          exit 1
+      - id: verify
+        uses: fluence-eu/ci-workflows/actions/verify-release-author@v5
+        with:
+          app-slug: ${{ steps.app-token.outputs.app-slug }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/checkout@v6
         if: steps.verify.outputs.is_release == 'true'
@@ -117,38 +79,11 @@ jobs:
           app-token: ${{ steps.app-token.outputs.token }}
           app-slug: ${{ steps.app-token.outputs.app-slug }}
 
-      - name: Read version from gemspec(s) and verify sync
-        id: version
+      - id: version
         if: steps.verify.outputs.is_release == 'true'
-        env:
-          GEM_SPECS: ${{ inputs.gem_specs }}
-        run: |
-          set -euo pipefail
-          REFERENCE=""
-          GEM_NAMES=""
-          while IFS= read -r line; do
-            line="$(echo "$line" | xargs)"
-            [ -z "$line" ] && continue
-            GEM_NAME="${line%%:*}"
-            if [ ! -f "${GEM_NAME}.gemspec" ]; then
-              echo "::error::Gemspec not found: ${GEM_NAME}.gemspec"
-              exit 1
-            fi
-            CURRENT=$(ruby -e "puts Gem::Specification.load('${GEM_NAME}.gemspec').version")
-            if [ -z "$REFERENCE" ]; then
-              REFERENCE="$CURRENT"
-            elif [ "$CURRENT" != "$REFERENCE" ]; then
-              echo "::error::Version mismatch: ${GEM_NAME} = ${CURRENT}, expected ${REFERENCE}"
-              exit 1
-            fi
-            GEM_NAMES="${GEM_NAMES}${GEM_NAME} "
-          done <<< "$GEM_SPECS"
-          if [ -z "$REFERENCE" ]; then
-            echo "::error::No gem_specs provided."
-            exit 1
-          fi
-          echo "tag=v${REFERENCE}" >> "$GITHUB_OUTPUT"
-          echo "gem_names=${GEM_NAMES}" >> "$GITHUB_OUTPUT"
+        uses: fluence-eu/ci-workflows/actions/read-and-verify-ruby-gem-versions@v5
+        with:
+          gem-specs: ${{ inputs.gem_specs }}
 
       - uses: fluence-eu/ci-workflows/actions/tag-and-release@v5
         id: tag

@@ -1,0 +1,43 @@
+name: Commit release branch
+description: |
+  Creates a `release/<tag>` branch, stages the provided files, commits
+  as `release: <tag>`, and pushes the branch.
+
+  Each entry in `files-to-stage` is skipped silently if the file does
+  not exist at the repo root — this lets callers pass conditionally
+  generated artifacts (package-lock.json, CHANGELOG.md, …) without
+  guarding each one upstream.
+
+  Expects `setup-release-bot-git` to have run earlier so the commit is
+  attributed to the release bot.
+
+inputs:
+  tag:
+    description: "Release tag (v-prefixed semver, e.g. `v1.2.3`)."
+    required: true
+  files-to-stage:
+    description: "Newline-separated list of files to git-add. Missing files are skipped silently."
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        TAG: ${{ inputs.tag }}
+        FILES_TO_STAGE: ${{ inputs.files-to-stage }}
+      run: |
+        set -euo pipefail
+        BRANCH="release/${TAG}"
+        git checkout -b "$BRANCH"
+        while IFS= read -r f; do
+          f="$(echo "$f" | xargs)"
+          [ -z "$f" ] && continue
+          if [ -f "$f" ]; then
+            git add "$f"
+          else
+            echo "::notice::commit-release-branch: skipping missing file '$f'"
+          fi
+        done <<< "$FILES_TO_STAGE"
+        git commit -m "release: ${TAG}"
+        git push -u origin "$BRANCH"

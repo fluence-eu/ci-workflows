@@ -1,0 +1,55 @@
+name: Read and verify npm package versions
+description: |
+  Reads the `version` field of one or more `package.json` files and
+  verifies they all match (multi-package releases require synced
+  versions). Outputs the shared version and the corresponding tag.
+
+  Used at release-time by `npm-release.yml` and internally by
+  `bump-npm-package-versions` (which then writes the bumped value
+  back). Splitting read-and-verify from write keeps a single source
+  of truth for both contexts.
+
+inputs:
+  package-paths:
+    description: "Newline-separated list of package.json paths."
+    required: true
+
+outputs:
+  version:
+    description: "The shared current version (semver, no v prefix)."
+    value: ${{ steps.read.outputs.version }}
+  tag:
+    description: "The corresponding tag (v-prefixed semver)."
+    value: ${{ steps.read.outputs.tag }}
+
+runs:
+  using: composite
+  steps:
+    - id: read
+      shell: bash
+      env:
+        PACKAGE_PATHS: ${{ inputs.package-paths }}
+      run: |
+        set -euo pipefail
+        REFERENCE=""
+        while IFS= read -r pkg; do
+          pkg="$(echo "$pkg" | xargs)"
+          [ -z "$pkg" ] && continue
+          if [ ! -f "$pkg" ]; then
+            echo "::error::package.json not found at: $pkg"
+            exit 1
+          fi
+          CURRENT=$(node -p "require('./$pkg').version")
+          if [ -z "$REFERENCE" ]; then
+            REFERENCE="$CURRENT"
+          elif [ "$CURRENT" != "$REFERENCE" ]; then
+            echo "::error::Version mismatch: ${pkg} = ${CURRENT}, expected ${REFERENCE}. Multi-package releases require synced versions."
+            exit 1
+          fi
+        done <<< "$PACKAGE_PATHS"
+        if [ -z "$REFERENCE" ]; then
+          echo "::error::No package_paths provided."
+          exit 1
+        fi
+        echo "version=${REFERENCE}" >> "$GITHUB_OUTPUT"
+        echo "tag=v${REFERENCE}" >> "$GITHUB_OUTPUT"

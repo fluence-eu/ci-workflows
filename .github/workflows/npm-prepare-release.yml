@@ -6,7 +6,9 @@ name: NPM — Prepare Release PR
 # the auto-merged "release: vX" commit fires the release pipeline.
 #
 # Mono-repo: pass `package_paths: package.json` (default).
-# Multi-package monorepo: pass a multiline list of paths.
+# Multi-package monorepo: pass a multiline list. All listed packages
+# are released as a tightly-coupled set under one version — their
+# current versions MUST match (the workflow fails fast otherwise).
 #
 # Optional `cross_pin_dependency`: when set to a npm package name, that
 # dep is pinned to the new version in every `package_paths` entry that
@@ -21,8 +23,8 @@ name: NPM — Prepare Release PR
 on:
   workflow_call:
     inputs:
-      version:
-        description: "New version (semver, no v prefix, e.g. 1.0.0)"
+      bump:
+        description: "Version bump type (patch|minor|major). The current version is read from the first package.json and bumped accordingly."
         required: true
         type: string
       package_paths:
@@ -32,7 +34,7 @@ on:
         default: |
           package.json
       cross_pin_dependency:
-        description: "Optional npm package name to pin to `version` in every package_paths entry that declares it. Empty = no cross-pin."
+        description: "Optional npm package name to pin to the new version in every package_paths entry that declares it. Empty = no cross-pin."
         required: false
         type: string
         default: ""
@@ -81,43 +83,12 @@ jobs:
         with:
           node-version: ${{ inputs.node_version }}
 
-      - name: Validate semver
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$'; then
-            echo "::error::Invalid semver: $VERSION"
-            exit 1
-          fi
-
-      - name: Bump version in package.json paths
-        env:
-          VERSION: ${{ inputs.version }}
-          PACKAGE_PATHS: ${{ inputs.package_paths }}
-          CROSS_PIN: ${{ inputs.cross_pin_dependency }}
-        run: |
-          set -euo pipefail
-          while IFS= read -r pkg; do
-            pkg="$(echo "$pkg" | xargs)"  # trim
-            [ -z "$pkg" ] && continue
-            if [ ! -f "$pkg" ]; then
-              echo "::error::package.json not found at: $pkg"
-              exit 1
-            fi
-            echo "Bumping $pkg → $VERSION"
-            node -e "
-              const fs = require('fs');
-              const path = process.argv[1];
-              const version = process.argv[2];
-              const crossPin = process.argv[3];
-              const json = JSON.parse(fs.readFileSync(path, 'utf-8'));
-              json.version = version;
-              if (crossPin && json.dependencies && json.dependencies[crossPin]) {
-                json.dependencies[crossPin] = version;
-              }
-              fs.writeFileSync(path, JSON.stringify(json, null, 2) + '\n');
-            " "$pkg" "$VERSION" "$CROSS_PIN"
-          done <<< "$PACKAGE_PATHS"
+      - id: bump
+        uses: fluence-eu/ci-workflows/actions/bump-npm-package-versions@v5
+        with:
+          bump: ${{ inputs.bump }}
+          package-paths: ${{ inputs.package_paths }}
+          cross-pin-dependency: ${{ inputs.cross_pin_dependency }}
 
       - name: Refresh package-lock.json
         run: npm install --package-lock-only
@@ -126,37 +97,25 @@ jobs:
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
-          args: --tag v${{ inputs.version }}
+          args: --tag ${{ steps.bump.outputs.tag }}
         env:
           OUTPUT: CHANGELOG.md
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create release branch + push
-        id: branch
-        env:
-          VERSION: ${{ inputs.version }}
-          PACKAGE_PATHS: ${{ inputs.package_paths }}
-        run: |
-          set -euo pipefail
-          BRANCH="release/v$VERSION"
-          git checkout -b "$BRANCH"
-          # Stage every bumped package.json plus the refreshed lock + changelog.
-          while IFS= read -r pkg; do
-            pkg="$(echo "$pkg" | xargs)"
-            [ -z "$pkg" ] && continue
-            git add "$pkg"
-          done <<< "$PACKAGE_PATHS"
-          [ -f package-lock.json ] && git add package-lock.json
-          [ -f CHANGELOG.md ] && git add CHANGELOG.md
-          git commit -m "release: v$VERSION"
-          git push -u origin "$BRANCH"
-          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+      - uses: fluence-eu/ci-workflows/actions/commit-release-branch@v5
+        with:
+          tag: ${{ steps.bump.outputs.tag }}
+          files-to-stage: |
+            ${{ inputs.package_paths }}
+            package-lock.json
+            CHANGELOG.md
 
       - name: Create release PR
         id: pr
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          VERSION: ${{ inputs.version }}
+          TAG: ${{ steps.bump.outputs.tag }}
+          VERSION: ${{ steps.bump.outputs.version }}
           PACKAGE_PATHS: ${{ inputs.package_paths }}
         run: |
           set -euo pipefail
@@ -165,12 +124,12 @@ jobs:
             pkg="$(echo "$pkg" | xargs)"
             [ -z "$pkg" ] && continue
             name=$(node -p "require('./$pkg').name")
-            printf -- '- `%s` → `v%s`\n' "$name" "$VERSION"
+            printf -- '- `%s` → `%s`\n' "$name" "$TAG"
           done <<< "$PACKAGE_PATHS")
           BODY=$(printf 'Version bump for npm package(s):\n\n%s\n\nAuto-merged once required checks pass.' "$PACKAGES_LIST")
           PR_URL=$(gh pr create \
             --base main \
-            --title "release: v$VERSION" \
+            --title "release: ${TAG}" \
             --body "$BODY")
           echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
 
