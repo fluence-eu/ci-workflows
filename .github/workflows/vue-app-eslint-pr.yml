@@ -54,7 +54,7 @@ jobs:
       skip_release_pr: ${{ steps.check.outputs.skip }}
     steps:
       - id: token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v3
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v5
         with:
           client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -75,7 +75,7 @@ jobs:
     name: Measure
     needs: resolve-bot
     if: needs.resolve-bot.outputs.skip_release_pr == 'false'
-    uses: fluence-eu/ci-workflows/.github/workflows/vue-app-eslint-measure.yml@v3
+    uses: fluence-eu/ci-workflows/.github/workflows/vue-app-eslint-measure.yml@v5
     with:
       node_version: ${{ inputs.node_version }}
       pre_install_command: ${{ inputs.pre_install_command }}
@@ -105,7 +105,7 @@ jobs:
 
       - name: Find latest base-branch run with eslint report
         id: base-run
-        uses: fluence-eu/ci-workflows/actions/find-base-run@v3
+        uses: fluence-eu/ci-workflows/actions/find-base-run@v5
         with:
           workflow_file: ${{ inputs.measure_workflow_file }}
 
@@ -131,14 +131,14 @@ jobs:
           fi
 
       - id: body
-        uses: fluence-eu/ci-workflows/actions/eslint-report@v3
+        uses: fluence-eu/ci-workflows/actions/eslint-report@v5
         with:
           outcome:   ${{ needs.measure.outputs.eslint_outcome }}
           base_ref:  origin/${{ github.base_ref }}
           pr_path:   eslint-pr/eslint.json
           base_path: ${{ steps.base.outputs.path }}
 
-      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v3
+      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v5
         with:
           marker:          '<!-- eslint-report -->'
           body:            ${{ steps.body.outputs.body }}
