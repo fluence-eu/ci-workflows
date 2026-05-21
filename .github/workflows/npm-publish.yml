@@ -27,9 +27,10 @@ on:
         type: string
         default: "22"
       scope:
-        description: "npm scope used by setup-node to configure .npmrc (e.g. `@fluence-eu`). Must match the actual scope of every package in `package_paths`."
-        required: true
+        description: "npm scope used by setup-node to configure .npmrc. Defaults to `@${{ github.repository_owner }}` (which GitHub Packages requires — scope must match the repo owner). Override only for tests or non-standard hosts."
+        required: false
         type: string
+        default: ""
 
   workflow_dispatch:
     inputs:
@@ -49,9 +50,10 @@ on:
         type: string
         default: "22"
       scope:
-        description: "npm scope used by setup-node (e.g. `@fluence-eu`)."
-        required: true
+        description: "npm scope used by setup-node. Defaults to `@${{ github.repository_owner }}`."
+        required: false
         type: string
+        default: ""
 
 jobs:
   publish:
@@ -79,7 +81,10 @@ jobs:
         with:
           node-version: ${{ inputs.node_version }}
           registry-url: "https://npm.pkg.github.com"
-          scope: ${{ inputs.scope }}
+          # GitHub Packages requires scope == repo owner. Default to that.
+          # The consumer may still override via `inputs.scope` for tests
+          # or unusual setups.
+          scope: ${{ inputs.scope != '' && inputs.scope || format('@{0}', github.repository_owner) }}
 
       - name: Download tarballs from release
         env:
