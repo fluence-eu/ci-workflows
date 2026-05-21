@@ -1,0 +1,116 @@
+name: NPM — Publish to GitHub Packages
+
+# Publishes already-built tarballs to GitHub Packages. The .tgz files
+# are downloaded from the release assets (attached by npm-release.yml)
+# rather than rebuilt, so what's shipped to the registry is bit-for-bit
+# the same archive as what's pinned to the GitHub Release.
+#
+# Symmetric with ruby-gem-publish.yml.
+
+on:
+  workflow_call:
+    inputs:
+      package_paths:
+        description: "Newline-separated list of package.json paths to publish. Used to read each package name + match its `.tgz` asset on the release."
+        required: false
+        type: string
+        default: |
+          package.json
+      tag:
+        description: "Tag to publish. Optional when called from `on: release` (the event provides it); required when called from `workflow_dispatch`."
+        required: false
+        type: string
+        default: ""
+      node_version:
+        description: "Node version for the runner"
+        required: false
+        type: string
+        default: "22"
+      scope:
+        description: "npm scope used by setup-node to configure .npmrc. Defaults to `@${{ github.repository_owner }}` (which GitHub Packages requires — scope must match the repo owner). Override only for tests or non-standard hosts."
+        required: false
+        type: string
+        default: ""
+
+  workflow_dispatch:
+    inputs:
+      package_paths:
+        description: "Newline-separated list of package.json paths to publish."
+        required: false
+        type: string
+        default: |
+          package.json
+      tag:
+        description: "Tag to publish (e.g. v0.1.0)."
+        required: true
+        type: string
+      node_version:
+        description: "Node version for the runner"
+        required: false
+        type: string
+        default: "22"
+      scope:
+        description: "npm scope used by setup-node. Defaults to `@${{ github.repository_owner }}`."
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Resolve tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          TAG="${INPUT_TAG:-$EVENT_TAG}"
+          if [[ -z "$TAG" ]]; then
+            echo "ERROR: no tag provided via inputs and no release event context available." >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ inputs.node_version }}
+          registry-url: "https://npm.pkg.github.com"
+          # GitHub Packages requires scope == repo owner. Default to that.
+          # The consumer may still override via `inputs.scope` for tests
+          # or unusual setups.
+          scope: ${{ inputs.scope != '' && inputs.scope || format('@{0}', github.repository_owner) }}
+
+      - name: Download tarballs from release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          gh release download "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "*.tgz" \
+            --clobber
+
+      - name: npm publish every downloaded tarball
+        env:
+          # setup-node has written /home/runner/work/_temp/.npmrc with
+          # the scoped registry mapping and the `${NODE_AUTH_TOKEN}`
+          # placeholder; the value is injected at publish time below.
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          tarballs=(*.tgz)
+          if [ "${#tarballs[@]}" -eq 0 ]; then
+            echo "::error::No .tgz asset found on release ${TAG}"
+            exit 1
+          fi
+          for tgz in "${tarballs[@]}"; do
+            echo "Publishing ${tgz}"
+            npm publish "$tgz"
+          done
