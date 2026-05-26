@@ -149,7 +149,7 @@ jobs:
           # fluence-ci-tools) can be fetched. The job declares
           # `permissions: packages: read` to grant the GITHUB_TOKEN the
           # required scope; the env var hands it to Bundler.
-          BUNDLE_RUBYGEMS__PKG__GITHUB__COM: ${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}
+          BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
         with:
           ruby-version: ${{ inputs.ruby_version }}
           bundler-cache: true
