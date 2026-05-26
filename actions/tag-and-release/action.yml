@@ -21,6 +21,10 @@ description: |
   event triggers downstream workflows like `publish.yml`); falls
   back to GITHUB_TOKEN otherwise.
 
+  With `draft: true` the Release is created unpublished (no event),
+  letting the caller attach build artifacts before flipping it to
+  published — see the `draft` input.
+
 inputs:
   tag:
     description: Tag to create and release (e.g. `v1.2.3`).
@@ -45,6 +49,10 @@ inputs:
     description: "GitHub App installation token. When set, the Release is created with this token so the release-published event can trigger downstream workflows. Falls back to GITHUB_TOKEN."
     required: false
     default: ""
+  draft:
+    description: "When `true`, create the Release as a draft so no `release` event fires on creation. The caller is then responsible for attaching assets and publishing it (`gh release edit <tag> --draft=false`), which emits `release: published` with the assets already attached — avoiding the race where a downstream publish workflow downloads assets before the upload finishes. Defaults to `false` (Release is created already published)."
+    required: false
+    default: "false"
 
 outputs:
   skipped:
@@ -129,6 +137,7 @@ runs:
         TAG: ${{ inputs.tag }}
         TITLE: ${{ inputs.title }}
         NOTES_ARGS: ${{ steps.notes.outputs.args }}
+        DRAFT: ${{ inputs.draft }}
       run: |
         TITLE="${TITLE:-$TAG}"
         # Idempotent: a re-run after a partial failure (tag created but
@@ -137,5 +146,9 @@ runs:
           echo "Release ${TAG} already exists, skipping creation."
           exit 0
         fi
+        DRAFT_FLAG=""
+        if [ "$DRAFT" = "true" ]; then
+          DRAFT_FLAG="--draft"
+        fi
         # shellcheck disable=SC2086
-        gh release create "$TAG" --title "$TITLE" $NOTES_ARGS
+        gh release create "$TAG" --title "$TITLE" $NOTES_ARGS $DRAFT_FLAG

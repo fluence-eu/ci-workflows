@@ -10,7 +10,10 @@ name: NPM — Release
 # this workflow.
 #
 # After tagging, builds each package and attaches the resulting `.tgz`
-# tarballs to the GitHub Release. Symmetric with ruby-gem-release.yml
+# tarballs to the GitHub Release. The Release is created as a draft and
+# only flipped to published once the tarballs are attached, so the
+# `release: published` event that triggers npm-publish.yml never fires
+# before the assets exist. Symmetric with ruby-gem-release.yml
 # (`gem build` + `gh release upload .gem`). The companion
 # `npm-publish.yml` then downloads those tarballs and `npm publish`-es
 # them — guarantees the published artifact is byte-identical to what
@@ -111,6 +114,10 @@ jobs:
           changelog-path: ${{ inputs.changelog_path }}
           notes-file: ${{ inputs.notes_file }}
           app-token: ${{ steps.app-token.outputs.token }}
+          # Create the Release as a draft so `release: published` does not
+          # fire before the tarballs are attached below. The "Publish the
+          # release" step flips it once the assets are in place.
+          draft: true
 
       - uses: actions/setup-node@v6
         if: steps.verify.outputs.is_release == 'true'
@@ -146,3 +153,16 @@ jobs:
           # re-run of the release workflow overwrites the existing asset
           # rather than failing on "asset already exists".
           gh release upload "$TAG" *.tgz --clobber
+
+      - name: Publish the release (now that tarballs are attached)
+        if: steps.verify.outputs.is_release == 'true'
+        env:
+          # App token so the resulting `release: published` event can
+          # trigger downstream workflows (npm-publish.yml). The release
+          # was created as a draft by tag-and-release; flipping it to
+          # published now fires the event with the .tgz assets already
+          # in place, so npm-publish.yml downloads them without racing
+          # the upload. Idempotent: a no-op if already published.
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh release edit "$TAG" --draft=false

@@ -2,8 +2,10 @@ name: Ruby Gem — Release
 
 # Triggered by consumer via push to main on the tracked version files.
 # Verifies the commit was authored by the release bot, reads the
-# version from each gemspec, delegates to the tag-and-release composite,
-# then builds + attaches each gem to the Release.
+# version from each gemspec, delegates to the tag-and-release composite
+# (as a draft), builds + attaches each gem, then publishes the Release.
+# Publishing last means the `release: published` event that triggers
+# ruby-gem-publish.yml only fires once the gems are attached.
 #
 # Companion to ruby-gem-prepare-release.yml: that workflow auto-merges
 # a "release: vX" commit touching version.rb files, which is what fires
@@ -93,6 +95,10 @@ jobs:
           notes-source: changelog
           changelog-path: CHANGELOG.md
           app-token: ${{ steps.app-token.outputs.token }}
+          # Create the Release as a draft so `release: published` does not
+          # fire before the gems are attached below. The "Publish the
+          # release" step flips it once the assets are in place.
+          draft: true
 
       - name: Build and attach gems
         if: steps.verify.outputs.is_release == 'true' && steps.tag.outputs.skipped == 'false'
@@ -106,3 +112,17 @@ jobs:
             gem build "${GEM_NAME}.gemspec"
             gh release upload "$TAG" "${GEM_NAME}"-*.gem --clobber
           done
+
+      - name: Publish the release (now that gems are attached)
+        if: steps.verify.outputs.is_release == 'true' && steps.tag.outputs.skipped == 'false'
+        env:
+          # App token so the resulting `release: published` event can
+          # trigger downstream workflows (ruby-gem-publish.yml). The
+          # release was created as a draft by tag-and-release; flipping
+          # it to published now fires the event with the .gem assets
+          # already in place, so ruby-gem-publish.yml downloads them
+          # without racing the upload. Gated on skipped == false (same as
+          # the attach step) so a re-run never publishes an asset-less draft.
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh release edit "$TAG" --draft=false
