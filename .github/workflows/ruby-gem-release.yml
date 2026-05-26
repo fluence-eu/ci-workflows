@@ -2,8 +2,11 @@ name: Ruby Gem — Release
 
 # Triggered by consumer via push to main on the tracked version files.
 # Verifies the commit was authored by the release bot, reads the
-# version from each gemspec, delegates to the tag-and-release composite,
-# then builds + attaches each gem to the Release.
+# version from each gemspec, delegates to the tag-and-release composite
+# (which creates the Release as a draft), builds + attaches each gem,
+# then flips the Release to published — so the `release: published`
+# event that triggers ruby-gem-publish.yml fires with the gems already
+# attached, instead of racing the upload.
 #
 # Companion to ruby-gem-prepare-release.yml: that workflow auto-merges
 # a "release: vX" commit touching version.rb files, which is what fires
@@ -93,6 +96,9 @@ jobs:
           notes-source: changelog
           changelog-path: CHANGELOG.md
           app-token: ${{ steps.app-token.outputs.token }}
+          # Hold the Release as a draft until the gems are attached
+          # (see the "Publish the release" step below).
+          draft: "true"
 
       - name: Build and attach gems
         if: steps.verify.outputs.is_release == 'true' && steps.tag.outputs.skipped == 'false'
@@ -106,3 +112,13 @@ jobs:
             gem build "${GEM_NAME}.gemspec"
             gh release upload "$TAG" "${GEM_NAME}"-*.gem --clobber
           done
+
+      - name: Publish the release
+        # Flips the draft Release to published now that the gems are
+        # attached. This fires the `release: published` event that
+        # triggers ruby-gem-publish.yml — with the assets guaranteed present.
+        if: steps.verify.outputs.is_release == 'true' && steps.tag.outputs.skipped == 'false'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh release edit "$TAG" --draft=false --latest

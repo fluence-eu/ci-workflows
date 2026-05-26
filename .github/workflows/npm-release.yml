@@ -9,12 +9,16 @@ name: NPM — Release
 # "release: vX" commit touching package.json, which is what fires
 # this workflow.
 #
-# After tagging, builds each package and attaches the resulting `.tgz`
-# tarballs to the GitHub Release. Symmetric with ruby-gem-release.yml
-# (`gem build` + `gh release upload .gem`). The companion
-# `npm-publish.yml` then downloads those tarballs and `npm publish`-es
-# them — guarantees the published artifact is byte-identical to what
-# is attached to the Release.
+# The Release is created as a DRAFT (so the `release: published` event
+# does NOT fire yet), then each package is built, packed, and its `.tgz`
+# attached. Only once the tarballs are uploaded is the Release flipped to
+# published — so the event that triggers `npm-publish.yml` fires with the
+# assets already present. (Publishing on creation races the upload: the
+# downstream job starts immediately and fails with "no assets to
+# download".) Symmetric with ruby-gem-release.yml (`gem build` +
+# `gh release upload .gem`). The companion `npm-publish.yml` then
+# downloads those tarballs and `npm publish`-es them — guarantees the
+# published artifact is byte-identical to what is attached to the Release.
 #
 # Pattern target: npm packages on GitHub Packages (or any registry
 # the consumer wires up downstream via the published release event).
@@ -111,6 +115,9 @@ jobs:
           changelog-path: ${{ inputs.changelog_path }}
           notes-file: ${{ inputs.notes_file }}
           app-token: ${{ steps.app-token.outputs.token }}
+          # Hold the Release as a draft until the tarballs are attached
+          # (see the "Publish the release" step below).
+          draft: "true"
 
       - uses: actions/setup-node@v6
         if: steps.verify.outputs.is_release == 'true'
@@ -146,3 +153,13 @@ jobs:
           # re-run of the release workflow overwrites the existing asset
           # rather than failing on "asset already exists".
           gh release upload "$TAG" *.tgz --clobber
+
+      - name: Publish the release
+        # Flips the draft Release to published now that the tarballs are
+        # attached. This is what fires the `release: published` event that
+        # triggers npm-publish.yml — with the assets guaranteed present.
+        if: steps.verify.outputs.is_release == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh release edit "$TAG" --draft=false --latest
