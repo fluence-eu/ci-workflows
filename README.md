@@ -54,6 +54,8 @@ Most gates are **strict** — the PR fails when findings are introduced. The cod
 
 Language-agnostic. Auth flows through `CLAUDE_CODE_OAUTH_TOKEN` (generated locally via `claude setup-token`), so runs bill against a Claude Pro/Max subscription instead of metered API credits. Release PRs (head_ref `release/v*` authored by the release App) are skipped when `FLUENCE_RELEASE_BOT_PRIVATE_KEY` is forwarded.
 
+The review is incremental across runs. The first run is exhaustive (every finding in one pass, no drip-feed); it records the reviewed head SHA in a marker inside its summary comment. Later runs read that marker and only comment on the diff introduced since — staying silent on unchanged code, and not re-raising a suggestion the author already pushed back on (unless there is a genuinely new argument).
+
 | Central workflow | Consumer file | Trigger | Mode | Role |
 |---|---|---|---|---|
 | `claude-review-pr.yml` | `claude-review-pr.yml` | `pull_request` | advisory | Sticky summary + inline review comments via `anthropics/claude-code-action@v1`. Never fails the PR — Claude is one reviewer among others, not a gate. |
