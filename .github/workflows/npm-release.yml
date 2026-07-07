@@ -24,38 +24,6 @@ name: NPM — Release
 
 on:
   workflow_call:
-    inputs:
-      package_paths:
-        description: "Newline-separated list of package.json paths to read the version from. The first one is the source of truth; the others must match (else fail). Defaults to a mono-repo single root package.json."
-        required: false
-        type: string
-        default: |
-          package.json
-      notes_source:
-        description: "Release notes source forwarded to tag-and-release: 'auto' | 'changelog' | 'file'. Defaults to 'changelog' (npm-prepare-release.yml runs git-cliff and commits CHANGELOG.md alongside the bump)."
-        required: false
-        type: string
-        default: changelog
-      changelog_path:
-        description: "Path to CHANGELOG.md when notes_source is 'changelog'."
-        required: false
-        type: string
-        default: CHANGELOG.md
-      notes_file:
-        description: "Path to a pre-written notes file when notes_source is 'file'."
-        required: false
-        type: string
-        default: ""
-      node_version:
-        description: "Node version used to build the tarballs attached to the Release."
-        required: false
-        type: string
-        default: "22"
-      build_command:
-        description: "Command used to produce the dist/ output of each workspace before `npm pack`. Defaults to the workspace-aware build."
-        required: false
-        type: string
-        default: "npm run build --workspaces"
     secrets:
       FLUENCE_RELEASE_BOT_PRIVATE_KEY:
         description: Private key of the GitHub App. Used to verify the release author and to emit the release-published event that triggers downstream publish workflows.
@@ -77,13 +45,13 @@ jobs:
 
     steps:
       - id: app-token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v5
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
         with:
           client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
 
       - id: verify
-        uses: fluence-eu/ci-workflows/actions/verify-release-author@v5
+        uses: fluence-eu/ci-workflows/actions/verify-release-author@v6
         with:
           app-slug: ${{ steps.app-token.outputs.app-slug }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -94,7 +62,20 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
-      - uses: fluence-eu/ci-workflows/actions/setup-release-bot-git@v5
+      - name: Read .fluence-ci.yml
+        id: cfg
+        if: steps.verify.outputs.is_release == 'true'
+        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        with:
+          keys: |
+            node_version=node_version=22
+            package_paths=release.package_paths=package.json
+            notes_source=release.notes_source=changelog
+            changelog_path=release.changelog_path=CHANGELOG.md
+            notes_file=release.notes_file=
+            build_command=release.build_command=npm run build --workspaces
+
+      - uses: fluence-eu/ci-workflows/actions/setup-release-bot-git@v6
         if: steps.verify.outputs.is_release == 'true'
         with:
           app-token: ${{ steps.app-token.outputs.token }}
@@ -102,17 +83,17 @@ jobs:
 
       - id: version
         if: steps.verify.outputs.is_release == 'true'
-        uses: fluence-eu/ci-workflows/actions/read-and-verify-npm-versions@v5
+        uses: fluence-eu/ci-workflows/actions/read-and-verify-npm-versions@v6
         with:
-          package-paths: ${{ inputs.package_paths }}
+          package-paths: ${{ fromJSON(steps.cfg.outputs.values).package_paths }}
 
-      - uses: fluence-eu/ci-workflows/actions/tag-and-release@v5
+      - uses: fluence-eu/ci-workflows/actions/tag-and-release@v6
         if: steps.verify.outputs.is_release == 'true'
         with:
           tag: ${{ steps.version.outputs.tag }}
-          notes-source: ${{ inputs.notes_source }}
-          changelog-path: ${{ inputs.changelog_path }}
-          notes-file: ${{ inputs.notes_file }}
+          notes-source: ${{ fromJSON(steps.cfg.outputs.values).notes_source }}
+          changelog-path: ${{ fromJSON(steps.cfg.outputs.values).changelog_path }}
+          notes-file: ${{ fromJSON(steps.cfg.outputs.values).notes_file }}
           app-token: ${{ steps.app-token.outputs.token }}
           # Create the Release as a draft so `release: published` does not
           # fire before the tarballs are attached below. The "Publish the
@@ -122,12 +103,12 @@ jobs:
       - uses: actions/setup-node@v6
         if: steps.verify.outputs.is_release == 'true'
         with:
-          node-version: ${{ inputs.node_version }}
+          node-version: ${{ fromJSON(steps.cfg.outputs.values).node_version }}
 
       - name: Install dependencies and build
         if: steps.verify.outputs.is_release == 'true'
         env:
-          BUILD_CMD: ${{ inputs.build_command }}
+          BUILD_CMD: ${{ fromJSON(steps.cfg.outputs.values).build_command }}
         run: |
           npm ci
           eval "$BUILD_CMD"
@@ -137,7 +118,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           TAG: ${{ steps.version.outputs.tag }}
-          PACKAGE_PATHS: ${{ inputs.package_paths }}
+          PACKAGE_PATHS: ${{ fromJSON(steps.cfg.outputs.values).package_paths }}
         run: |
           set -euo pipefail
           while IFS= read -r pkg; do
