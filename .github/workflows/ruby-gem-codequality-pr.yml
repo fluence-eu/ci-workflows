@@ -17,20 +17,6 @@ name: Ruby Gem — Code Quality PR Check
 on:
   workflow_call:
     inputs:
-      ruby_version:
-        description: Ruby version for the runner.
-        required: false
-        type: string
-        default: '4.0'
-      paths:
-        description: |
-          Optional space-separated source paths to scan, forwarded as
-          `--paths "..."` to `fluence-ci codequality`. When empty,
-          Steps#codequality auto-detects (`app lib` for Rails, `lib`
-          for plain gems). Useful for monorepos / non-standard layouts.
-        required: false
-        type: string
-        default: ''
       measure_workflow_file:
         description: Consumer workflow filename that uploaded the `codequality-report` artifact on the base branch (used to find the baseline).
         required: false
@@ -61,7 +47,7 @@ jobs:
       skip_release_pr: ${{ steps.check.outputs.skip }}
     steps:
       - id: token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v5
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
         with:
           client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -87,10 +73,7 @@ jobs:
     name: Measure
     needs: resolve-bot
     if: needs.resolve-bot.outputs.skip_release_pr == 'false'
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-measure.yml@v5
-    with:
-      ruby_version: ${{ inputs.ruby_version }}
-      paths:        ${{ inputs.paths }}
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-measure.yml@v6
 
   comment:
     name: Comment on PR
@@ -107,6 +90,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Read .fluence-ci.yml
+        id: cfg
+        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        with:
+          keys: |
+            ruby_version=ruby_version=4.0
+
       - name: Download PR codequality report
         uses: actions/download-artifact@v8
         with:
@@ -115,7 +105,7 @@ jobs:
 
       - name: Find latest base-branch run with codequality report
         id: base-run
-        uses: fluence-eu/ci-workflows/actions/find-base-run@v5
+        uses: fluence-eu/ci-workflows/actions/find-base-run@v6
         with:
           workflow_file: ${{ inputs.measure_workflow_file }}
 
@@ -151,11 +141,11 @@ jobs:
           # required scope; the env var hands it to Bundler.
           BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
         with:
-          ruby-version: ${{ inputs.ruby_version }}
+          ruby-version: ${{ fromJSON(steps.cfg.outputs.values).ruby_version }}
           bundler-cache: true
 
       - id: body
-        uses: fluence-eu/ci-workflows/actions/codequality-report@v5
+        uses: fluence-eu/ci-workflows/actions/codequality-report@v6
         with:
           reek_path:      codequality-pr/reek.json
           flog_path:      codequality-pr/flog.txt
@@ -164,7 +154,7 @@ jobs:
           base_flog_path: ${{ steps.base.outputs.flog }}
           base_flay_path: ${{ steps.base.outputs.flay }}
 
-      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v5
+      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v6
         with:
           marker:          '<!-- codequality-report -->'
           body:            ${{ steps.body.outputs.body }}

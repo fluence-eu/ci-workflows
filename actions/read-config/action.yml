@@ -1,0 +1,41 @@
+name: Read Fluence CI config
+description: >
+  Reads per-project options from the consumer repo's `.fluence-ci.yml`
+  (must run after the consumer checkout). Each requested key resolves to
+  the file's value or the provided default; keys listed in `required`
+  fail the step with an explicit message when the file doesn't provide
+  them. All values are exposed as a single JSON object so callers pick
+  them with `fromJSON(steps.<id>.outputs.values).<key>`.
+
+inputs:
+  keys:
+    description: |
+      One spec per line: `<key>=<dot.path>[=<default>]`. `<key>` is the
+      name in the `values` output, `<dot.path>` the location in
+      `.fluence-ci.yml` (e.g. `coverage.command`), `<default>` the value
+      used when the file doesn't set it (empty when omitted).
+    required: true
+  required:
+    description: Space-separated keys the config file must provide.
+    required: false
+    default: ''
+  file:
+    description: Path of the consumer config file.
+    required: false
+    default: .fluence-ci.yml
+
+outputs:
+  values:
+    description: JSON object mapping each requested key to its resolved value (strings).
+    value: ${{ steps.read.outputs.values }}
+
+runs:
+  using: composite
+  steps:
+    - id: read
+      shell: bash
+      env:
+        KEYS: ${{ inputs.keys }}
+        REQUIRED: ${{ inputs.required }}
+        FILE: ${{ inputs.file }}
+      run: ruby "${GITHUB_ACTION_PATH}/read_config.rb"
