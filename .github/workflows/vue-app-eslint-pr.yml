@@ -10,21 +10,6 @@ name: Vue App — ESLint PR Check
 on:
   workflow_call:
     inputs:
-      node_version:
-        description: Node version for the runner
-        required: false
-        type: string
-        default: '20'
-      pre_install_command:
-        description: Optional shell command run between setup-node and npm ci (e.g. to configure a private npm registry). Forwarded to the nested measure reusable.
-        required: false
-        type: string
-        default: ''
-      lint_command:
-        description: Forwarded to vue-app-eslint-measure.yml.
-        required: false
-        type: string
-        default: 'npx --no-install eslint . --format json --output-file tmp/fluence-report/eslint.json'
       measure_workflow_file:
         description: Consumer workflow filename that uploaded the `eslint-report` artifact on the base branch.
         required: false
@@ -54,7 +39,7 @@ jobs:
       skip_release_pr: ${{ steps.check.outputs.skip }}
     steps:
       - id: token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v5
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
         with:
           client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -75,11 +60,7 @@ jobs:
     name: Measure
     needs: resolve-bot
     if: needs.resolve-bot.outputs.skip_release_pr == 'false'
-    uses: fluence-eu/ci-workflows/.github/workflows/vue-app-eslint-measure.yml@v5
-    with:
-      node_version: ${{ inputs.node_version }}
-      pre_install_command: ${{ inputs.pre_install_command }}
-      lint_command: ${{ inputs.lint_command }}
+    uses: fluence-eu/ci-workflows/.github/workflows/vue-app-eslint-measure.yml@v6
     secrets:
       NPMRC_AUTH: ${{ secrets.NPMRC_AUTH }}
 
@@ -105,7 +86,7 @@ jobs:
 
       - name: Find latest base-branch run with eslint report
         id: base-run
-        uses: fluence-eu/ci-workflows/actions/find-base-run@v5
+        uses: fluence-eu/ci-workflows/actions/find-base-run@v6
         with:
           workflow_file: ${{ inputs.measure_workflow_file }}
 
@@ -131,14 +112,14 @@ jobs:
           fi
 
       - id: body
-        uses: fluence-eu/ci-workflows/actions/eslint-report@v5
+        uses: fluence-eu/ci-workflows/actions/eslint-report@v6
         with:
           outcome:   ${{ needs.measure.outputs.eslint_outcome }}
           base_ref:  origin/${{ github.base_ref }}
           pr_path:   eslint-pr/eslint.json
           base_path: ${{ steps.base.outputs.path }}
 
-      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v5
+      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v6
         with:
           marker:          '<!-- eslint-report -->'
           body:            ${{ steps.body.outputs.body }}

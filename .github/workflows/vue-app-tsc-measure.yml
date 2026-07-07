@@ -5,22 +5,6 @@ name: Vue App — TypeScript Measure
 
 on:
   workflow_call:
-    inputs:
-      node_version:
-        description: Node version for the runner
-        required: false
-        type: string
-        default: '20'
-      pre_install_command:
-        description: Optional shell command run between setup-node and npm ci (e.g. to configure a private npm registry).
-        required: false
-        type: string
-        default: ''
-      typecheck_command:
-        description: Shell command running the typecheck. stderr is captured to tmp/fluence-report/tsc.txt.
-        required: false
-        type: string
-        default: 'npx --no-install vue-tsc --noEmit'
     outputs:
       tsc_outcome:
         description: Outcome of the typecheck step.
@@ -44,14 +28,23 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Read .fluence-ci.yml
+        id: cfg
+        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        with:
+          keys: |
+            node_version=node_version=20
+            pre_install_command=pre_install_command=
+            typecheck_command=tsc.typecheck_command=npx --no-install vue-tsc --noEmit
+
       - uses: actions/setup-node@v5
         with:
-          node-version: ${{ inputs.node_version }}
+          node-version: ${{ fromJSON(steps.cfg.outputs.values).node_version }}
           cache: 'npm'
 
       - name: Pre-install setup
-        if: inputs.pre_install_command != ''
-        run: ${{ inputs.pre_install_command }}
+        if: fromJSON(steps.cfg.outputs.values).pre_install_command != ''
+        run: ${{ fromJSON(steps.cfg.outputs.values).pre_install_command }}
 
       - name: Configure private npm registries
         if: env.NPMRC_AUTH != ''
@@ -66,7 +59,7 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p tmp/fluence-report
-          ${{ inputs.typecheck_command }} 2>&1 | tee tmp/fluence-report/tsc.txt
+          ${{ fromJSON(steps.cfg.outputs.values).typecheck_command }} 2>&1 | tee tmp/fluence-report/tsc.txt
           exit ${PIPESTATUS[0]}
 
       - name: Upload tsc report
