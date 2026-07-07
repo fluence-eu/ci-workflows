@@ -21,12 +21,6 @@ name: Rails — Security Measure
 
 on:
   workflow_call:
-    inputs:
-      ruby_version:
-        description: Ruby version for the runner.
-        required: false
-        type: string
-        default: '4.0'
     outputs:
       security_outcome:
         description: Outcome of the combined security suite (`success` / `failure`).
@@ -45,6 +39,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Read .fluence-ci.yml
+        id: cfg
+        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        with:
+          keys: |
+            ruby_version=ruby_version=4.0
+
       - uses: ruby/setup-ruby@v1
         env:
           # Authenticate `bundle install` (triggered by bundler-cache: true)
@@ -54,7 +55,7 @@ jobs:
           # required scope; the env var hands it to Bundler.
           BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
         with:
-          ruby-version: ${{ inputs.ruby_version }}
+          ruby-version: ${{ fromJSON(steps.cfg.outputs.values).ruby_version }}
           bundler-cache: true
 
       # Invokes the gem's `security --report` command (not the three

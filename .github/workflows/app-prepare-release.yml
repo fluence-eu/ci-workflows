@@ -16,17 +16,6 @@ name: App — Prepare Release PR
 
 on:
   workflow_call:
-    inputs:
-      develop_branch:
-        description: Working branch to release from.
-        required: false
-        type: string
-        default: "develop"
-      tag_format:
-        description: UTC date format for the generated tag (passed to `date -u +…`).
-        required: false
-        type: string
-        default: "%Y.%m.%d.%H%M%S"
     secrets:
       FLUENCE_RELEASE_BOT_PRIVATE_KEY:
         description: Private key of the GitHub App that opens + auto-merges the release PR.
@@ -48,18 +37,27 @@ jobs:
 
     steps:
       - id: app-token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v5
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
         with:
           client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
 
+      # Checks out the triggering ref — the consumer dispatches this from
+      # its working branch, which is also where .fluence-ci.yml is read.
       - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.develop_branch }}
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
-      - uses: fluence-eu/ci-workflows/actions/setup-release-bot-git@v5
+      - name: Read .fluence-ci.yml
+        id: cfg
+        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        with:
+          keys: |
+            develop_branch=release.develop_branch=develop
+            tag_format=release.tag_format=%Y.%m.%d.%H%M%S
+
+      - uses: fluence-eu/ci-workflows/actions/setup-release-bot-git@v6
         with:
           app-token: ${{ steps.app-token.outputs.token }}
           app-slug: ${{ steps.app-token.outputs.app-slug }}
@@ -67,7 +65,7 @@ jobs:
       - name: Generate tag
         id: version
         env:
-          TAG_FORMAT: ${{ inputs.tag_format }}
+          TAG_FORMAT: ${{ fromJSON(steps.cfg.outputs.values).tag_format }}
         run: echo "tag=v$(date -u +"$TAG_FORMAT")" >> "$GITHUB_OUTPUT"
 
       - name: Initialize changelog if missing
@@ -99,7 +97,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           TAG: ${{ steps.version.outputs.tag }}
-          BASE: ${{ inputs.develop_branch }}
+          BASE: ${{ fromJSON(steps.cfg.outputs.values).develop_branch }}
         run: |
           BRANCH="release/${TAG}"
           git checkout -b "$BRANCH"
@@ -113,7 +111,7 @@ jobs:
             --head "$BRANCH")
           echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
 
-      - uses: fluence-eu/ci-workflows/actions/automerge-pr-with-retry@v5
+      - uses: fluence-eu/ci-workflows/actions/automerge-pr-with-retry@v6
         if: steps.diff.outputs.changed == 'true'
         with:
           pr-url: ${{ steps.pr.outputs.url }}
