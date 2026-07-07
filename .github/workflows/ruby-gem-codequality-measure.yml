@@ -16,9 +16,9 @@ name: Ruby Gem — Code Quality Measure
 # Path detection lives in Steps#codequality: `app lib` for Rails
 # apps/engines (when `app/` exists), `lib` otherwise. Consumers with
 # a non-standard layout (monorepo / custom subdirs) can override via
-# the `paths` input below — it is forwarded to `fluence-ci
-# codequality --paths "..."` so the catalog method's auto-detection
-# is bypassed.
+# the `codequality.paths` key of their `.fluence-ci.yml` — it is
+# forwarded to `fluence-ci codequality --paths "..."` so the catalog
+# method's auto-detection is bypassed.
 #
 # Called from two places (mirrors ruby-gem-{docs,coverage,rubocop}-measure):
 # - the consumer's codequality-measure.yml on push to main, to
@@ -28,20 +28,6 @@ name: Ruby Gem — Code Quality Measure
 
 on:
   workflow_call:
-    inputs:
-      ruby_version:
-        description: Ruby version for the runner.
-        required: false
-        type: string
-        default: '4.0'
-      paths:
-        description: |
-          Optional space-separated source paths to scan (e.g. `gems/foo lib`
-          for monorepos). When omitted, Steps#codequality auto-detects:
-          `app lib` for Rails apps/engines, `lib` for plain gems.
-        required: false
-        type: string
-        default: ''
 
 permissions:
   contents: read
@@ -54,6 +40,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Read .fluence-ci.yml
+        id: cfg
+        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        with:
+          keys: |
+            ruby_version=ruby_version=4.0
+            paths=codequality.paths=
+
       - uses: ruby/setup-ruby@v1
         env:
           # Authenticate `bundle install` (triggered by bundler-cache: true)
@@ -63,7 +57,7 @@ jobs:
           # required scope; the env var hands it to Bundler.
           BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
         with:
-          ruby-version: ${{ inputs.ruby_version }}
+          ruby-version: ${{ fromJSON(steps.cfg.outputs.values).ruby_version }}
           bundler-cache: true
 
       - name: Run codequality (reek + flog + flay)
@@ -73,12 +67,12 @@ jobs:
         # tools are advisory; the PR sticky comment surfaces trends.
         # `continue-on-error` is kept defensively so a tool crash
         # (rather than a finding) doesn't abort the upload.
-        # The optional `paths` input is forwarded as `--paths`; when
-        # empty the CLI omits the flag and Steps#codequality applies
-        # its `app lib` / `lib` auto-detection.
+        # The optional `codequality.paths` config key is forwarded as
+        # `--paths`; when empty the CLI omits the flag and
+        # Steps#codequality applies its `app lib` / `lib` auto-detection.
         continue-on-error: true
         env:
-          PATHS: ${{ inputs.paths }}
+          PATHS: ${{ fromJSON(steps.cfg.outputs.values).paths }}
         shell: bash
         run: |
           if [ -n "$PATHS" ]; then

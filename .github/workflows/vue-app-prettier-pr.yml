@@ -3,19 +3,6 @@ name: Vue App — Prettier PR Check
 on:
   workflow_call:
     inputs:
-      node_version:
-        required: false
-        type: string
-        default: '20'
-      pre_install_command:
-        description: Optional shell command run between setup-node and npm ci (e.g. to configure a private npm registry). Forwarded to the nested measure reusable.
-        required: false
-        type: string
-        default: ''
-      format_command:
-        required: false
-        type: string
-        default: 'npx --no-install prettier --check .'
       measure_workflow_file:
         required: false
         type: string
@@ -40,7 +27,7 @@ jobs:
       skip_release_pr: ${{ steps.check.outputs.skip }}
     steps:
       - id: token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v5
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
         with:
           client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -60,11 +47,7 @@ jobs:
     name: Measure
     needs: resolve-bot
     if: needs.resolve-bot.outputs.skip_release_pr == 'false'
-    uses: fluence-eu/ci-workflows/.github/workflows/vue-app-prettier-measure.yml@v5
-    with:
-      node_version: ${{ inputs.node_version }}
-      pre_install_command: ${{ inputs.pre_install_command }}
-      format_command: ${{ inputs.format_command }}
+    uses: fluence-eu/ci-workflows/.github/workflows/vue-app-prettier-measure.yml@v6
     secrets:
       NPMRC_AUTH: ${{ secrets.NPMRC_AUTH }}
 
@@ -87,7 +70,7 @@ jobs:
 
       - name: Find latest base-branch run with prettier report
         id: base-run
-        uses: fluence-eu/ci-workflows/actions/find-base-run@v5
+        uses: fluence-eu/ci-workflows/actions/find-base-run@v6
         with:
           workflow_file: ${{ inputs.measure_workflow_file }}
 
@@ -113,14 +96,14 @@ jobs:
           fi
 
       - id: body
-        uses: fluence-eu/ci-workflows/actions/prettier-report@v5
+        uses: fluence-eu/ci-workflows/actions/prettier-report@v6
         with:
           outcome:   ${{ needs.measure.outputs.prettier_outcome }}
           base_ref:  origin/${{ github.base_ref }}
           pr_path:   prettier-pr/prettier.txt
           base_path: ${{ steps.base.outputs.path }}
 
-      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v5
+      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v6
         with:
           marker:          '<!-- prettier-report -->'
           body:            ${{ steps.body.outputs.body }}

@@ -1,42 +1,20 @@
 name: Ruby Gem — Publish to GitHub Packages
 
-# Publishes an already-built gem to GitHub Packages. The gem is
-# downloaded from the release assets (attached by ruby-gem-release.yml)
-# rather than rebuilt, so what's shipped to the registry is bit-for-bit
-# the same binary as what's pinned to the GitHub Release.
+# Publishes already-built gems to GitHub Packages. Every .gem asset is
+# downloaded from the release (attached by ruby-gem-release.yml) rather
+# than rebuilt, so what's shipped to the registry is bit-for-bit the
+# same binary as what's pinned to the GitHub Release. Multi-gem repos
+# release all their gems under one tag, so publishing every asset is
+# the whole set by construction. Symmetric with npm-publish.yml.
 
 on:
   workflow_call:
     inputs:
-      gem_name:
-        description: Gem name (must match gemspec filename and the `<gem_name>-*.gem` asset on the release)
-        required: true
-        type: string
       tag:
-        description: 'Tag to publish. Optional when called from `on: release` (the event provides it); required when called from `workflow_dispatch`.'
+        description: 'Tag to publish. Optional when called from `on: release` (the event provides it); required when the consumer wrapper is dispatched manually.'
         required: false
         type: string
         default: ''
-      ruby_version:
-        description: Ruby version for the runner
-        required: false
-        type: string
-        default: '4.0'
-  workflow_dispatch:
-    inputs:
-      gem_name:
-        description: Gem name (must match the `<gem_name>-*.gem` asset on the release)
-        required: true
-        type: string
-      tag:
-        description: Tag to publish (e.g. v0.12.0)
-        required: true
-        type: string
-      ruby_version:
-        description: Ruby version for the runner
-        required: false
-        type: string
-        default: '4.0'
 
 jobs:
   publish:
@@ -47,6 +25,15 @@ jobs:
       packages: write
 
     steps:
+      - uses: actions/checkout@v6
+
+      - name: Read .fluence-ci.yml
+        id: cfg
+        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        with:
+          keys: |
+            ruby_version=ruby_version=4.0
+
       - name: Resolve tag
         id: tag
         env:
@@ -62,30 +49,29 @@ jobs:
 
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: ${{ inputs.ruby_version }}
+          ruby-version: ${{ fromJSON(steps.cfg.outputs.values).ruby_version }}
 
-      - name: Download gem asset from release
+      - name: Download gem assets from release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag.outputs.tag }}
-          GEM_NAME: ${{ inputs.gem_name }}
         run: |
-          # ruby-gem-release.yml attaches the gem before publishing the
-          # Release, so it is normally present when this fires. The retry
-          # only absorbs GitHub's brief asset-availability lag (an attached
-          # asset can take a moment to be downloadable). The `if` guard
-          # keeps the loop alive under `set -e`.
+          # ruby-gem-release.yml attaches the gems before publishing the
+          # Release, so they are normally present when this fires. The
+          # retry only absorbs GitHub's brief asset-availability lag (an
+          # attached asset can take a moment to be downloadable). The `if`
+          # guard keeps the loop alive under `set -e`.
           for attempt in 1 2 3 4 5; do
             if gh release download "$TAG" \
                  --repo "$GITHUB_REPOSITORY" \
-                 --pattern "${GEM_NAME}-*.gem" \
+                 --pattern "*.gem" \
                  --clobber; then
               exit 0
             fi
             echo "download attempt ${attempt}/5 failed, retrying in 3s..."
             sleep 3
           done
-          echo "::error::Could not download ${GEM_NAME}-*.gem from release ${TAG} after 5 attempts"
+          echo "::error::Could not download *.gem from release ${TAG} after 5 attempts"
           exit 1
 
       - name: Configure gem credentials
@@ -102,5 +88,16 @@ jobs:
           EOF
           chmod 0600 ~/.gem/credentials
 
-      - name: Push gem to GitHub Packages
-        run: gem push --key github --host https://rubygems.pkg.github.com/fluence-eu ${{ inputs.gem_name }}-*.gem
+      - name: Push every downloaded gem to GitHub Packages
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          gems=(*.gem)
+          if [ "${#gems[@]}" -eq 0 ]; then
+            echo "::error::No .gem asset found on the release"
+            exit 1
+          fi
+          for gem in "${gems[@]}"; do
+            echo "Publishing ${gem}"
+            gem push --key github --host https://rubygems.pkg.github.com/fluence-eu "$gem"
+          done

@@ -19,17 +19,6 @@ name: App — Release
 
 on:
   workflow_call:
-    inputs:
-      develop_branch:
-        description: Working branch the release is cut from.
-        required: false
-        type: string
-        default: "develop"
-      main_branch:
-        description: Released branch to force-push `develop` onto after the release.
-        required: false
-        type: string
-        default: "main"
     secrets:
       FLUENCE_RELEASE_BOT_PRIVATE_KEY:
         description: Private key of the GitHub App used to verify the release author and push the main mirror.
@@ -51,25 +40,36 @@ jobs:
 
     steps:
       - id: app-token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v5
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
         with:
           client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
 
       - id: verify
-        uses: fluence-eu/ci-workflows/actions/verify-release-author@v5
+        uses: fluence-eu/ci-workflows/actions/verify-release-author@v6
         with:
           app-slug: ${{ steps.app-token.outputs.app-slug }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Checks out the pushed commit's ref — the consumer triggers this
+      # on push to its working branch, which is also where
+      # .fluence-ci.yml is read.
       - uses: actions/checkout@v6
         if: steps.verify.outputs.is_release == 'true'
         with:
-          ref: ${{ inputs.develop_branch }}
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
-      - uses: fluence-eu/ci-workflows/actions/setup-release-bot-git@v5
+      - name: Read .fluence-ci.yml
+        id: cfg
+        if: steps.verify.outputs.is_release == 'true'
+        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        with:
+          keys: |
+            develop_branch=release.develop_branch=develop
+            main_branch=release.main_branch=main
+
+      - uses: fluence-eu/ci-workflows/actions/setup-release-bot-git@v6
         if: steps.verify.outputs.is_release == 'true'
         with:
           app-token: ${{ steps.app-token.outputs.token }}
@@ -88,7 +88,7 @@ jobs:
           fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
-      - uses: fluence-eu/ci-workflows/actions/tag-and-release@v5
+      - uses: fluence-eu/ci-workflows/actions/tag-and-release@v6
         if: steps.verify.outputs.is_release == 'true'
         with:
           tag: ${{ steps.version.outputs.tag }}
@@ -99,6 +99,6 @@ jobs:
       - name: Mirror released branch
         if: steps.verify.outputs.is_release == 'true'
         env:
-          DEVELOP: ${{ inputs.develop_branch }}
-          MAIN: ${{ inputs.main_branch }}
+          DEVELOP: ${{ fromJSON(steps.cfg.outputs.values).develop_branch }}
+          MAIN: ${{ fromJSON(steps.cfg.outputs.values).main_branch }}
         run: git push origin "$DEVELOP":"$MAIN" --force

@@ -5,9 +5,10 @@ name: Ruby Gem — Prepare Release PR
 # Companion to ruby-gem-release.yml: the auto-merged "release: vX"
 # commit fires the release pipeline.
 #
-# Mono-gem: pass `gem_specs: fluence-gateway-auth` (single line).
-# Multi-gem: pass a multiline list. All gems are bumped to the SAME
-# version — their current versions must already match.
+# Gem names come from the consumer's `.fluence-ci.yml` under
+# `release.gem_specs`. Mono-gem: a single name. Multi-gem: a multiline
+# list. All gems are bumped to the SAME version — their current
+# versions must already match.
 #
 # Version file is auto-derived from the gem name via the Bundler
 # default convention:
@@ -16,26 +17,18 @@ name: Ruby Gem — Prepare Release PR
 #
 # Override on a per-gem basis when the convention does not hold:
 #
-#   gem_specs: |
-#     fluence-foo
-#     fluence-weirdo:lib/non/standard/v.rb
+#   release:
+#     gem_specs: |
+#       fluence-foo
+#       fluence-weirdo:lib/non/standard/v.rb
 
 on:
   workflow_call:
     inputs:
-      gem_specs:
-        description: 'Newline-separated list of gem names (without .gemspec). Optional ":path/to/version.rb" override per line.'
-        required: true
-        type: string
       bump:
         description: "Version bump type (patch|minor|major)"
         required: true
         type: string
-      ruby_version:
-        description: "Ruby version for the runner"
-        required: false
-        type: string
-        default: "4.0"
     secrets:
       FLUENCE_RELEASE_BOT_PRIVATE_KEY:
         description: Private key of the GitHub App that opens + auto-merges the release PR
@@ -57,7 +50,7 @@ jobs:
 
     steps:
       - id: app-token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v5
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
         with:
           client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -67,20 +60,29 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
-      - uses: fluence-eu/ci-workflows/actions/setup-release-bot-git@v5
+      - name: Read .fluence-ci.yml
+        id: cfg
+        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        with:
+          keys: |
+            ruby_version=ruby_version=4.0
+            gem_specs=release.gem_specs=
+          required: gem_specs
+
+      - uses: fluence-eu/ci-workflows/actions/setup-release-bot-git@v6
         with:
           app-token: ${{ steps.app-token.outputs.token }}
           app-slug: ${{ steps.app-token.outputs.app-slug }}
 
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: ${{ inputs.ruby_version }}
+          ruby-version: ${{ fromJSON(steps.cfg.outputs.values).ruby_version }}
 
       - id: bump
-        uses: fluence-eu/ci-workflows/actions/bump-ruby-gem-versions@v5
+        uses: fluence-eu/ci-workflows/actions/bump-ruby-gem-versions@v6
         with:
           bump: ${{ inputs.bump }}
-          gem-specs: ${{ inputs.gem_specs }}
+          gem-specs: ${{ fromJSON(steps.cfg.outputs.values).gem_specs }}
 
       - name: Generate changelog
         uses: orhun/git-cliff-action@v4
@@ -91,7 +93,7 @@ jobs:
           OUTPUT: CHANGELOG.md
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: fluence-eu/ci-workflows/actions/commit-release-branch@v5
+      - uses: fluence-eu/ci-workflows/actions/commit-release-branch@v6
         with:
           tag: ${{ steps.bump.outputs.tag }}
           files-to-stage: |
@@ -104,7 +106,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           TAG: ${{ steps.bump.outputs.tag }}
           VERSION: ${{ steps.bump.outputs.version }}
-          GEM_SPECS: ${{ inputs.gem_specs }}
+          GEM_SPECS: ${{ fromJSON(steps.cfg.outputs.values).gem_specs }}
         run: |
           set -euo pipefail
           GEM_LIST=$(while IFS= read -r line; do
@@ -120,7 +122,7 @@ jobs:
             --body "$BODY")
           echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
 
-      - uses: fluence-eu/ci-workflows/actions/automerge-pr-with-retry@v5
+      - uses: fluence-eu/ci-workflows/actions/automerge-pr-with-retry@v6
         with:
           pr-url: ${{ steps.pr.outputs.url }}
           app-token: ${{ steps.app-token.outputs.token }}

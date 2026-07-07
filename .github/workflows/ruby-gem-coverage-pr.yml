@@ -15,34 +15,11 @@ name: Ruby Gem — Coverage PR Check
 on:
   workflow_call:
     inputs:
-      ruby_version:
-        description: Ruby version for the runner
-        required: false
-        type: string
-        default: '4.0'
-      command:
-        description: |
-          Optional explicit test command forwarded as `--command "..."`
-          to `fluence-ci tests` via ruby-gem-coverage-measure.yml. When
-          empty, Steps#tests auto-detects.
-        required: false
-        type: string
-        default: ''
       measure_workflow_file:
         description: Consumer workflow filename that uploaded the `coverage` artifact on the base branch (used to find the baseline).
         required: false
         type: string
         default: 'coverage-measure.yml'
-      include_files:
-        description: undercover --include-files glob (files considered for coverage).
-        required: false
-        type: string
-        default: 'lib/**/*.rb'
-      exclude_files:
-        description: undercover --exclude-files glob (files ignored by coverage). Empty = no exclusion.
-        required: false
-        type: string
-        default: ''
     secrets:
       FLUENCE_CI_BOT_PRIVATE_KEY:
         description: Optional GitHub App private key used to author the sticky PR comment. When omitted, the comment is posted as `github-actions[bot]` via the default `GITHUB_TOKEN`.
@@ -68,7 +45,7 @@ jobs:
       skip_release_pr: ${{ steps.check.outputs.skip }}
     steps:
       - id: token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v5
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
         with:
           client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -94,10 +71,7 @@ jobs:
     name: Measure
     needs: resolve-bot
     if: needs.resolve-bot.outputs.skip_release_pr == 'false'
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-measure.yml@v5
-    with:
-      ruby_version: ${{ inputs.ruby_version }}
-      command: ${{ inputs.command }}
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-measure.yml@v6
 
   comment:
     name: Comment on PR
@@ -114,6 +88,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Read .fluence-ci.yml
+        id: cfg
+        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        with:
+          keys: |
+            ruby_version=ruby_version=4.0
+            include_files=coverage.include_files=lib/**/*.rb
+            exclude_files=coverage.exclude_files=
+
       - uses: ruby/setup-ruby@v1
         env:
           # Authenticate `bundle install` (triggered by bundler-cache: true)
@@ -123,7 +106,7 @@ jobs:
           # required scope; the env var hands it to Bundler.
           BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
         with:
-          ruby-version: ${{ inputs.ruby_version }}
+          ruby-version: ${{ fromJSON(steps.cfg.outputs.values).ruby_version }}
           bundler-cache: true
 
       - name: Download PR coverage artifact
@@ -134,7 +117,7 @@ jobs:
 
       - name: Find latest base-branch run with coverage artifact
         id: base-run
-        uses: fluence-eu/ci-workflows/actions/find-base-run@v5
+        uses: fluence-eu/ci-workflows/actions/find-base-run@v6
         with:
           workflow_file: ${{ inputs.measure_workflow_file }}
 
@@ -152,8 +135,8 @@ jobs:
         id: coverage
         continue-on-error: true
         env:
-          INCLUDE_FILES: ${{ inputs.include_files }}
-          EXCLUDE_FILES: ${{ inputs.exclude_files }}
+          INCLUDE_FILES: ${{ fromJSON(steps.cfg.outputs.values).include_files }}
+          EXCLUDE_FILES: ${{ fromJSON(steps.cfg.outputs.values).exclude_files }}
         run: |
           set -o pipefail
           EXCLUDE_ARG=""
@@ -174,14 +157,14 @@ jobs:
           fi
 
       - id: body
-        uses: fluence-eu/ci-workflows/actions/coverage-report@v5
+        uses: fluence-eu/ci-workflows/actions/coverage-report@v6
         with:
           outcome:   ${{ steps.coverage.outcome }}
           base_ref:  origin/${{ github.base_ref }}
           pr_path:   coverage/.resultset.json
           base_path: ${{ steps.base.outputs.path }}
 
-      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v5
+      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v6
         with:
           marker:          '<!-- coverage-report -->'
           body:            ${{ steps.body.outputs.body }}

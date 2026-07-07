@@ -10,47 +10,8 @@ name: NPM — Publish to GitHub Packages
 on:
   workflow_call:
     inputs:
-      package_paths:
-        description: "Newline-separated list of package.json paths to publish. Used to read each package name + match its `.tgz` asset on the release."
-        required: false
-        type: string
-        default: |
-          package.json
       tag:
-        description: "Tag to publish. Optional when called from `on: release` (the event provides it); required when called from `workflow_dispatch`."
-        required: false
-        type: string
-        default: ""
-      node_version:
-        description: "Node version for the runner"
-        required: false
-        type: string
-        default: "22"
-      scope:
-        description: "npm scope used by setup-node to configure .npmrc. When left empty (default), the workflow resolves it to `@<repo-owner>` at runtime — GitHub Packages requires the scope to match the repo owner. Override only for tests or non-standard hosts."
-        required: false
-        type: string
-        default: ""
-
-  workflow_dispatch:
-    inputs:
-      package_paths:
-        description: "Newline-separated list of package.json paths to publish."
-        required: false
-        type: string
-        default: |
-          package.json
-      tag:
-        description: "Tag to publish (e.g. v0.1.0)."
-        required: true
-        type: string
-      node_version:
-        description: "Node version for the runner"
-        required: false
-        type: string
-        default: "22"
-      scope:
-        description: "npm scope used by setup-node. Empty (default) → resolved to `@<repo-owner>` at runtime."
+        description: "Tag to publish. Optional when called from `on: release` (the event provides it); required when the consumer wrapper is dispatched manually."
         required: false
         type: string
         default: ""
@@ -64,6 +25,16 @@ jobs:
       packages: write
 
     steps:
+      - uses: actions/checkout@v6
+
+      - name: Read .fluence-ci.yml
+        id: cfg
+        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        with:
+          keys: |
+            node_version=node_version=22
+            scope=release.scope=
+
       - name: Resolve tag
         id: tag
         env:
@@ -79,12 +50,12 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: ${{ inputs.node_version }}
+          node-version: ${{ fromJSON(steps.cfg.outputs.values).node_version }}
           registry-url: "https://npm.pkg.github.com"
           # GitHub Packages requires scope == repo owner. Default to that.
-          # The consumer may still override via `inputs.scope` for tests
-          # or unusual setups.
-          scope: ${{ inputs.scope != '' && inputs.scope || format('@{0}', github.repository_owner) }}
+          # The consumer may still override via the `release.scope` config
+          # key for tests or unusual setups.
+          scope: ${{ fromJSON(steps.cfg.outputs.values).scope != '' && fromJSON(steps.cfg.outputs.values).scope || format('@{0}', github.repository_owner) }}
 
       - name: Download tarballs from release
         env:

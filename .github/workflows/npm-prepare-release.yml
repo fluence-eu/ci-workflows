@@ -5,16 +5,18 @@ name: NPM — Prepare Release PR
 # via git-cliff, opens an auto-merged PR. Companion to npm-release.yml:
 # the auto-merged "release: vX" commit fires the release pipeline.
 #
-# Mono-repo: pass `package_paths: package.json` (default).
-# Multi-package monorepo: pass a multiline list. All listed packages
-# are released as a tightly-coupled set under one version — their
-# current versions MUST match (the workflow fails fast otherwise).
+# Package paths come from the consumer's `.fluence-ci.yml` under
+# `release.package_paths`. Mono-repo: `package.json` (default).
+# Multi-package monorepo: a multiline list. All listed packages are
+# released as a tightly-coupled set under one version — their current
+# versions MUST match (the workflow fails fast otherwise).
 #
-# Optional `cross_pin_dependency`: when set to a npm package name, that
-# dep is pinned to the new version in every `package_paths` entry that
-# declares it. Use this when one workspace package depends on another
-# in the same monorepo and you want them released as a tight pair (e.g.
-# a UI package importing an internal API from a sibling).
+# Optional `release.cross_pin_dependency`: when set to a npm package
+# name, that dep is pinned to the new version in every package_paths
+# entry that declares it. Use this when one workspace package depends
+# on another in the same monorepo and you want them released as a
+# tight pair (e.g. a UI package importing an internal API from a
+# sibling).
 #
 # Requires `cliff.toml` at the repo root (mirror the convention from the
 # ruby-gem-* family). The reusable does NOT ship a default config — that
@@ -27,22 +29,6 @@ on:
         description: "Version bump type (patch|minor|major). The current version is read from the first package.json and bumped accordingly."
         required: true
         type: string
-      package_paths:
-        description: "Newline-separated list of package.json paths to bump. Defaults to a mono-repo single root package.json."
-        required: false
-        type: string
-        default: |
-          package.json
-      cross_pin_dependency:
-        description: "Optional npm package name to pin to the new version in every package_paths entry that declares it. Empty = no cross-pin."
-        required: false
-        type: string
-        default: ""
-      node_version:
-        description: "Node version for the runner"
-        required: false
-        type: string
-        default: "22"
     secrets:
       FLUENCE_RELEASE_BOT_PRIVATE_KEY:
         description: Private key of the GitHub App that opens + auto-merges the release PR
@@ -64,7 +50,7 @@ jobs:
 
     steps:
       - id: app-token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v5
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
         with:
           client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -74,21 +60,30 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
-      - uses: fluence-eu/ci-workflows/actions/setup-release-bot-git@v5
+      - name: Read .fluence-ci.yml
+        id: cfg
+        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        with:
+          keys: |
+            node_version=node_version=22
+            package_paths=release.package_paths=package.json
+            cross_pin_dependency=release.cross_pin_dependency=
+
+      - uses: fluence-eu/ci-workflows/actions/setup-release-bot-git@v6
         with:
           app-token: ${{ steps.app-token.outputs.token }}
           app-slug: ${{ steps.app-token.outputs.app-slug }}
 
       - uses: actions/setup-node@v6
         with:
-          node-version: ${{ inputs.node_version }}
+          node-version: ${{ fromJSON(steps.cfg.outputs.values).node_version }}
 
       - id: bump
-        uses: fluence-eu/ci-workflows/actions/bump-npm-package-versions@v5
+        uses: fluence-eu/ci-workflows/actions/bump-npm-package-versions@v6
         with:
           bump: ${{ inputs.bump }}
-          package-paths: ${{ inputs.package_paths }}
-          cross-pin-dependency: ${{ inputs.cross_pin_dependency }}
+          package-paths: ${{ fromJSON(steps.cfg.outputs.values).package_paths }}
+          cross-pin-dependency: ${{ fromJSON(steps.cfg.outputs.values).cross_pin_dependency }}
 
       - name: Refresh package-lock.json
         run: npm install --package-lock-only
@@ -102,11 +97,11 @@ jobs:
           OUTPUT: CHANGELOG.md
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: fluence-eu/ci-workflows/actions/commit-release-branch@v5
+      - uses: fluence-eu/ci-workflows/actions/commit-release-branch@v6
         with:
           tag: ${{ steps.bump.outputs.tag }}
           files-to-stage: |
-            ${{ inputs.package_paths }}
+            ${{ fromJSON(steps.cfg.outputs.values).package_paths }}
             package-lock.json
             CHANGELOG.md
 
@@ -116,7 +111,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           TAG: ${{ steps.bump.outputs.tag }}
           VERSION: ${{ steps.bump.outputs.version }}
-          PACKAGE_PATHS: ${{ inputs.package_paths }}
+          PACKAGE_PATHS: ${{ fromJSON(steps.cfg.outputs.values).package_paths }}
         run: |
           set -euo pipefail
           # Build a human-friendly bullet list of affected packages.
@@ -133,7 +128,7 @@ jobs:
             --body "$BODY")
           echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
 
-      - uses: fluence-eu/ci-workflows/actions/automerge-pr-with-retry@v5
+      - uses: fluence-eu/ci-workflows/actions/automerge-pr-with-retry@v6
         with:
           pr-url: ${{ steps.pr.outputs.url }}
           app-token: ${{ steps.app-token.outputs.token }}
