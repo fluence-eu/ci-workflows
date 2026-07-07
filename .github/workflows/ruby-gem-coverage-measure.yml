@@ -20,23 +20,6 @@ name: Ruby Gem — Coverage Measure
 
 on:
   workflow_call:
-    inputs:
-      ruby_version:
-        description: Ruby version for the runner
-        required: false
-        type: string
-        default: '4.0'
-      command:
-        description: |
-          Optional explicit test command, forwarded as `--command
-          "..."` to `fluence-ci tests`. When omitted, Steps#tests
-          auto-detects (`rspec` for rspec, `bin/rails test` for Rails
-          minitest, `bundle exec rake test` for plain minitest). Useful
-          for non-standard test runners or to pin to a specific rake
-          task on minitest projects.
-        required: false
-        type: string
-        default: ''
 
 permissions:
   contents: read
@@ -49,6 +32,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Read .fluence-ci.yml
+        id: cfg
+        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        with:
+          keys: |
+            ruby_version=ruby_version=4.0
+            command=coverage.command=
+
       - uses: ruby/setup-ruby@v1
         env:
           # Authenticate `bundle install` (triggered by bundler-cache: true)
@@ -58,16 +49,16 @@ jobs:
           # required scope; the env var hands it to Bundler.
           BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
         with:
-          ruby-version: ${{ inputs.ruby_version }}
+          ruby-version: ${{ fromJSON(steps.cfg.outputs.values).ruby_version }}
           bundler-cache: true
 
       - name: Run tests
         # Steps#tests auto-detects rspec / minitest / Rails when no
-        # --command override is forwarded. SimpleCov (configured by
-        # the consumer in spec_helper / test_helper) writes `coverage/`
-        # as a side effect of the run.
+        # --command override is forwarded (`coverage.command` config
+        # key). SimpleCov (configured by the consumer in spec_helper /
+        # test_helper) writes `coverage/` as a side effect of the run.
         env:
-          COMMAND: ${{ inputs.command }}
+          COMMAND: ${{ fromJSON(steps.cfg.outputs.values).command }}
         shell: bash
         run: |
           if [ -n "$COMMAND" ]; then

@@ -10,12 +10,6 @@ name: Ruby Gem — Docs Deploy
 
 on:
   workflow_call:
-    inputs:
-      ruby_version:
-        description: Ruby version for the runner
-        required: false
-        type: string
-        default: '4.0'
 
 permissions:
   contents: read
@@ -32,6 +26,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Read .fluence-ci.yml
+        id: cfg
+        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        with:
+          keys: |
+            ruby_version=ruby_version=4.0
+
       - uses: ruby/setup-ruby@v1
         env:
           # Authenticate `bundle install` (triggered by bundler-cache: true)
@@ -41,7 +42,7 @@ jobs:
           # required scope; the env var hands it to Bundler.
           BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
         with:
-          ruby-version: ${{ inputs.ruby_version }}
+          ruby-version: ${{ fromJSON(steps.cfg.outputs.values).ruby_version }}
           bundler-cache: true
 
       - name: Cache YARD parser output
@@ -49,14 +50,14 @@ jobs:
         with:
           path: .yardoc
           # The .yardoc blob ties to the YARD runtime — it's keyed on
-          # Ruby version (inputs.ruby_version, the source of truth for
-          # setup-ruby) and bundled YARD/yardstick versions (Gemfile.lock
-          # for apps, gemspec for gems) so a runtime bump can't restore
-          # an incompatible AST. Source/config files in hashFiles trigger
-          # incremental re-parses; the restore-key fallback keeps the
-          # same Ruby-version prefix.
-          key: yard-${{ runner.os }}-${{ inputs.ruby_version }}-${{ hashFiles('lib/**/*.rb', '.yardopts', '.yardstick.yml', 'Gemfile.lock', '*.gemspec') }}
-          restore-keys: yard-${{ runner.os }}-${{ inputs.ruby_version }}-
+          # Ruby version (the ruby_version config key, the source of
+          # truth for setup-ruby) and bundled YARD/yardstick versions
+          # (Gemfile.lock for apps, gemspec for gems) so a runtime bump
+          # can't restore an incompatible AST. Source/config files in
+          # hashFiles trigger incremental re-parses; the restore-key
+          # fallback keeps the same Ruby-version prefix.
+          key: yard-${{ runner.os }}-${{ fromJSON(steps.cfg.outputs.values).ruby_version }}-${{ hashFiles('lib/**/*.rb', '.yardopts', '.yardstick.yml', 'Gemfile.lock', '*.gemspec') }}
+          restore-keys: yard-${{ runner.os }}-${{ fromJSON(steps.cfg.outputs.values).ruby_version }}-
 
       - name: Build YARD site
         # `fluence-ci docs --build` (fluence-ci-tools v0.6+) invokes
