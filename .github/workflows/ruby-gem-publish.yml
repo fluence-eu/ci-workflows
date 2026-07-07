@@ -8,35 +8,11 @@ name: Ruby Gem — Publish to GitHub Packages
 on:
   workflow_call:
     inputs:
-      gem_name:
-        description: Gem name (must match gemspec filename and the `<gem_name>-*.gem` asset on the release)
-        required: true
-        type: string
       tag:
-        description: 'Tag to publish. Optional when called from `on: release` (the event provides it); required when called from `workflow_dispatch`.'
+        description: 'Tag to publish. Optional when called from `on: release` (the event provides it); required when the consumer wrapper is dispatched manually.'
         required: false
         type: string
         default: ''
-      ruby_version:
-        description: Ruby version for the runner
-        required: false
-        type: string
-        default: '4.0'
-  workflow_dispatch:
-    inputs:
-      gem_name:
-        description: Gem name (must match the `<gem_name>-*.gem` asset on the release)
-        required: true
-        type: string
-      tag:
-        description: Tag to publish (e.g. v0.12.0)
-        required: true
-        type: string
-      ruby_version:
-        description: Ruby version for the runner
-        required: false
-        type: string
-        default: '4.0'
 
 jobs:
   publish:
@@ -47,6 +23,17 @@ jobs:
       packages: write
 
     steps:
+      - uses: actions/checkout@v6
+
+      - name: Read .fluence-ci.yml
+        id: cfg
+        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        with:
+          keys: |
+            ruby_version=ruby_version=4.0
+            gem_name=release.gem_name=
+          required: gem_name
+
       - name: Resolve tag
         id: tag
         env:
@@ -62,13 +49,13 @@ jobs:
 
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: ${{ inputs.ruby_version }}
+          ruby-version: ${{ fromJSON(steps.cfg.outputs.values).ruby_version }}
 
       - name: Download gem asset from release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag.outputs.tag }}
-          GEM_NAME: ${{ inputs.gem_name }}
+          GEM_NAME: ${{ fromJSON(steps.cfg.outputs.values).gem_name }}
         run: |
           # ruby-gem-release.yml attaches the gem before publishing the
           # Release, so it is normally present when this fires. The retry
@@ -103,4 +90,6 @@ jobs:
           chmod 0600 ~/.gem/credentials
 
       - name: Push gem to GitHub Packages
-        run: gem push --key github --host https://rubygems.pkg.github.com/fluence-eu ${{ inputs.gem_name }}-*.gem
+        env:
+          GEM_NAME: ${{ fromJSON(steps.cfg.outputs.values).gem_name }}
+        run: gem push --key github --host https://rubygems.pkg.github.com/fluence-eu "${GEM_NAME}"-*.gem

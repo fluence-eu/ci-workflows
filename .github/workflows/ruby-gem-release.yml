@@ -13,16 +13,6 @@ name: Ruby Gem — Release
 
 on:
   workflow_call:
-    inputs:
-      gem_specs:
-        description: "Newline-separated list of gem names (without .gemspec). Multi-gem releases require all gemspec versions to match."
-        required: true
-        type: string
-      ruby_version:
-        description: "Ruby version for the runner"
-        required: false
-        type: string
-        default: "4.0"
     secrets:
       FLUENCE_RELEASE_BOT_PRIVATE_KEY:
         description: "Private key of the release GitHub App. Used to verify the release author and to emit the release-published event that triggers downstream publish workflows."
@@ -45,13 +35,13 @@ jobs:
 
     steps:
       - id: app-token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v5
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
         with:
           client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
 
       - id: verify
-        uses: fluence-eu/ci-workflows/actions/verify-release-author@v5
+        uses: fluence-eu/ci-workflows/actions/verify-release-author@v6
         with:
           app-slug: ${{ steps.app-token.outputs.app-slug }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -61,6 +51,16 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
+
+      - name: Read .fluence-ci.yml
+        id: cfg
+        if: steps.verify.outputs.is_release == 'true'
+        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        with:
+          keys: |
+            ruby_version=ruby_version=4.0
+            gem_specs=release.gem_specs=
+          required: gem_specs
 
       - uses: ruby/setup-ruby@v1
         if: steps.verify.outputs.is_release == 'true'
@@ -72,10 +72,10 @@ jobs:
           # required scope; the env var hands it to Bundler.
           BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
         with:
-          ruby-version: ${{ inputs.ruby_version }}
+          ruby-version: ${{ fromJSON(steps.cfg.outputs.values).ruby_version }}
           bundler-cache: true
 
-      - uses: fluence-eu/ci-workflows/actions/setup-release-bot-git@v5
+      - uses: fluence-eu/ci-workflows/actions/setup-release-bot-git@v6
         if: steps.verify.outputs.is_release == 'true'
         with:
           app-token: ${{ steps.app-token.outputs.token }}
@@ -83,11 +83,11 @@ jobs:
 
       - id: version
         if: steps.verify.outputs.is_release == 'true'
-        uses: fluence-eu/ci-workflows/actions/read-and-verify-ruby-gem-versions@v5
+        uses: fluence-eu/ci-workflows/actions/read-and-verify-ruby-gem-versions@v6
         with:
-          gem-specs: ${{ inputs.gem_specs }}
+          gem-specs: ${{ fromJSON(steps.cfg.outputs.values).gem_specs }}
 
-      - uses: fluence-eu/ci-workflows/actions/tag-and-release@v5
+      - uses: fluence-eu/ci-workflows/actions/tag-and-release@v6
         id: tag
         if: steps.verify.outputs.is_release == 'true'
         with:
