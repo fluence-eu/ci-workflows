@@ -41,7 +41,15 @@ jobs:
         uses: fluence-eu/ci-workflows/actions/read-config@v6
         with:
           keys: |
-            ruby_version=ruby_version=4.0
+            ruby_version=ruby_version=
+
+      - name: Resolve Ruby version
+        id: ruby
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        with:
+          config_version: ${{ fromJSON(steps.cfg.outputs.values).ruby_version }}
+          file: .ruby-version
+          default: '4.0'
 
       - uses: ruby/setup-ruby@v1
         env:
@@ -52,7 +60,7 @@ jobs:
           # required scope; the env var hands it to Bundler.
           BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
         with:
-          ruby-version: ${{ fromJSON(steps.cfg.outputs.values).ruby_version }}
+          ruby-version: ${{ steps.ruby.outputs.version }}
           bundler-cache: true
 
       - name: Cache rubocop analysis
@@ -60,15 +68,14 @@ jobs:
         with:
           path: tmp/rubocop
           # The cache must vary with anything that affects the binary
-          # parser output: Ruby runtime (the ruby_version config key, the
-          # source of truth for setup-ruby — `.ruby-version` is unreliable
-          # as consumers may not commit it), bundled rubocop version
+          # parser output: Ruby runtime (the resolved version — the same
+          # value setup-ruby ran with), bundled rubocop version
           # (Gemfile.lock for apps, gemspec for gems — hashFiles silently
           # ignores missing files), and rubocop config.
           # restore-keys keeps the same Ruby-version prefix so a fallback
           # never crosses runtimes.
-          key: rubocop-${{ runner.os }}-${{ fromJSON(steps.cfg.outputs.values).ruby_version }}-${{ hashFiles('**/.rubocop.yml', '**/.rubocop_todo.yml', 'Gemfile.lock', '*.gemspec') }}
-          restore-keys: rubocop-${{ runner.os }}-${{ fromJSON(steps.cfg.outputs.values).ruby_version }}-
+          key: rubocop-${{ runner.os }}-${{ steps.ruby.outputs.version }}-${{ hashFiles('**/.rubocop.yml', '**/.rubocop_todo.yml', 'Gemfile.lock', '*.gemspec') }}
+          restore-keys: rubocop-${{ runner.os }}-${{ steps.ruby.outputs.version }}-
 
       # Invokes the gem's `lint --report` command (not `bundle exec
       # rubocop` directly) so the catalog defined in

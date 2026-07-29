@@ -31,7 +31,15 @@ jobs:
         uses: fluence-eu/ci-workflows/actions/read-config@v6
         with:
           keys: |
-            ruby_version=ruby_version=4.0
+            ruby_version=ruby_version=
+
+      - name: Resolve Ruby version
+        id: ruby
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        with:
+          config_version: ${{ fromJSON(steps.cfg.outputs.values).ruby_version }}
+          file: .ruby-version
+          default: '4.0'
 
       - uses: ruby/setup-ruby@v1
         env:
@@ -42,7 +50,7 @@ jobs:
           # required scope; the env var hands it to Bundler.
           BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
         with:
-          ruby-version: ${{ fromJSON(steps.cfg.outputs.values).ruby_version }}
+          ruby-version: ${{ steps.ruby.outputs.version }}
           bundler-cache: true
 
       - name: Cache YARD parser output
@@ -50,14 +58,14 @@ jobs:
         with:
           path: .yardoc
           # The .yardoc blob ties to the YARD runtime — it's keyed on
-          # Ruby version (the ruby_version config key, the source of
-          # truth for setup-ruby) and bundled YARD/yardstick versions
+          # Ruby version (the resolved version — the same value
+          # setup-ruby ran with) and bundled YARD/yardstick versions
           # (Gemfile.lock for apps, gemspec for gems) so a runtime bump
           # can't restore an incompatible AST. Source/config files in
           # hashFiles trigger incremental re-parses; the restore-key
           # fallback keeps the same Ruby-version prefix.
-          key: yard-${{ runner.os }}-${{ fromJSON(steps.cfg.outputs.values).ruby_version }}-${{ hashFiles('lib/**/*.rb', '.yardopts', '.yardstick.yml', 'Gemfile.lock', '*.gemspec') }}
-          restore-keys: yard-${{ runner.os }}-${{ fromJSON(steps.cfg.outputs.values).ruby_version }}-
+          key: yard-${{ runner.os }}-${{ steps.ruby.outputs.version }}-${{ hashFiles('lib/**/*.rb', '.yardopts', '.yardstick.yml', 'Gemfile.lock', '*.gemspec') }}
+          restore-keys: yard-${{ runner.os }}-${{ steps.ruby.outputs.version }}-
 
       - name: Build YARD site
         # `fluence-ci docs --build` (fluence-ci-tools v0.6+) invokes

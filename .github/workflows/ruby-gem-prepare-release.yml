@@ -65,7 +65,7 @@ jobs:
         uses: fluence-eu/ci-workflows/actions/read-config@v6
         with:
           keys: |
-            ruby_version=ruby_version=4.0
+            ruby_version=ruby_version=
             gem_specs=release.gem_specs=
           required: gem_specs
 
@@ -74,9 +74,17 @@ jobs:
           app-token: ${{ steps.app-token.outputs.token }}
           app-slug: ${{ steps.app-token.outputs.app-slug }}
 
+      - name: Resolve Ruby version
+        id: ruby
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        with:
+          config_version: ${{ fromJSON(steps.cfg.outputs.values).ruby_version }}
+          file: .ruby-version
+          default: '4.0'
+
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: ${{ fromJSON(steps.cfg.outputs.values).ruby_version }}
+          ruby-version: ${{ steps.ruby.outputs.version }}
 
       - id: bump
         uses: fluence-eu/ci-workflows/actions/bump-ruby-gem-versions@v6

@@ -93,9 +93,17 @@ jobs:
         uses: fluence-eu/ci-workflows/actions/read-config@v6
         with:
           keys: |
-            ruby_version=ruby_version=4.0
+            ruby_version=ruby_version=
             include_files=coverage.include_files=lib/**/*.rb
             exclude_files=coverage.exclude_files=
+
+      - name: Resolve Ruby version
+        id: ruby
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        with:
+          config_version: ${{ fromJSON(steps.cfg.outputs.values).ruby_version }}
+          file: .ruby-version
+          default: '4.0'
 
       - uses: ruby/setup-ruby@v1
         env:
@@ -106,7 +114,7 @@ jobs:
           # required scope; the env var hands it to Bundler.
           BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
         with:
-          ruby-version: ${{ fromJSON(steps.cfg.outputs.values).ruby_version }}
+          ruby-version: ${{ steps.ruby.outputs.version }}
           bundler-cache: true
 
       - name: Download PR coverage artifact
