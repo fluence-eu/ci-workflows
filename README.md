@@ -96,7 +96,7 @@ Every key is optional unless noted — omitted keys fall back to the defaults sh
 
 ```yaml
 ruby_version: '4.0'          # Ruby families (setup-ruby + caches)
-node_version: '20'           # vue-app-* default '20', npm-* default '22'
+node_version: ''             # vue-app-*: empty = read `.nvmrc`, then '20'; npm-* default '22'
 pre_install_command: ''      # vue-app-*: shell run between setup-node and npm ci
 
 codequality:

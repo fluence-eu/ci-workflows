@@ -33,13 +33,22 @@ jobs:
         uses: fluence-eu/ci-workflows/actions/read-config@v6
         with:
           keys: |
-            node_version=node_version=20
+            node_version=node_version=
             pre_install_command=pre_install_command=
             format_command=prettier.format_command=npx --no-install prettier --check .
 
+      - name: Resolve Node version
+        id: node
+        env:
+          CONFIG_VERSION: ${{ fromJSON(steps.cfg.outputs.values).node_version }}
+        run: |
+          version="$CONFIG_VERSION"
+          if [ -z "$version" ] && [ -f .nvmrc ]; then version=$(cat .nvmrc); fi
+          echo "version=${version:-20}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/setup-node@v5
         with:
-          node-version: ${{ fromJSON(steps.cfg.outputs.values).node_version }}
+          node-version: ${{ steps.node.outputs.version }}
           cache: 'npm'
 
       - name: Pre-install setup
