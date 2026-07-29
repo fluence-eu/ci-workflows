@@ -33,13 +33,18 @@ jobs:
         uses: fluence-eu/ci-workflows/actions/read-config@v6
         with:
           keys: |
-            node_version=node_version=20
             pre_install_command=pre_install_command=
             typecheck_command=tsc.typecheck_command=npx --no-install vue-tsc --noEmit
 
+      - name: Resolve Node version
+        id: node
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        with:
+          runtime: node
+
       - uses: actions/setup-node@v5
         with:
-          node-version: ${{ fromJSON(steps.cfg.outputs.values).node_version }}
+          node-version: ${{ steps.node.outputs.version }}
           cache: 'npm'
 
       - name: Pre-install setup

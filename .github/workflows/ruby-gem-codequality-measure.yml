@@ -45,8 +45,13 @@ jobs:
         uses: fluence-eu/ci-workflows/actions/read-config@v6
         with:
           keys: |
-            ruby_version=ruby_version=4.0
             paths=codequality.paths=
+
+      - name: Resolve Ruby version
+        id: ruby
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        with:
+          runtime: ruby
 
       - uses: ruby/setup-ruby@v1
         env:
@@ -57,7 +62,7 @@ jobs:
           # required scope; the env var hands it to Bundler.
           BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
         with:
-          ruby-version: ${{ fromJSON(steps.cfg.outputs.values).ruby_version }}
+          ruby-version: ${{ steps.ruby.outputs.version }}
           bundler-cache: true
 
       - name: Run codequality (reek + flog + flay)

@@ -32,7 +32,6 @@ jobs:
         uses: fluence-eu/ci-workflows/actions/read-config@v6
         with:
           keys: |
-            node_version=node_version=22
             scope=release.scope=
 
       - name: Resolve tag
@@ -48,9 +47,16 @@ jobs:
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve Node version
+        id: node
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        with:
+          runtime: node
+          default: '22'
+
       - uses: actions/setup-node@v6
         with:
-          node-version: ${{ fromJSON(steps.cfg.outputs.values).node_version }}
+          node-version: ${{ steps.node.outputs.version }}
           registry-url: "https://npm.pkg.github.com"
           # GitHub Packages requires scope == repo owner. Default to that.
           # The consumer may still override via the `release.scope` config

@@ -1,0 +1,48 @@
+name: Resolve version from config or file
+description: >
+  Resolves the runtime version with the precedence `.fluence-ci.yml` value >
+  version file > default. `runtime: node` reads the `node_version` key then
+  `.nvmrc`, falling back to '20'; `runtime: ruby` reads `ruby_version` then
+  `.ruby-version`, falling back to '4.0'. Must run after the consumer
+  checkout so the config and version files are on the runner.
+
+inputs:
+  runtime:
+    description: Runtime to resolve (`node` or `ruby`).
+    required: true
+  default:
+    description: >
+      Replaces the runtime's built-in fallback when neither the config key
+      nor the version file provides a value. The `npm-*` family passes '22'
+      to keep its historical default, which differs from the `vue-app-*` '20'.
+    required: false
+    default: ''
+
+outputs:
+  version:
+    description: The resolved version.
+    value: ${{ steps.resolve.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - id: cfg
+      uses: fluence-eu/ci-workflows/actions/read-config@v6
+      with:
+        keys: version=${{ inputs.runtime }}_version=
+    - id: resolve
+      shell: bash
+      env:
+        RUNTIME: ${{ inputs.runtime }}
+        CONFIG_VERSION: ${{ fromJSON(steps.cfg.outputs.values).version }}
+        DEFAULT_OVERRIDE: ${{ inputs.default }}
+      run: |
+        case "$RUNTIME" in
+          node) file=.nvmrc default=20 ;;
+          ruby) file=.ruby-version default=4.0 ;;
+          *) echo "::error::unknown runtime '$RUNTIME'"; exit 1 ;;
+        esac
+        default="${DEFAULT_OVERRIDE:-$default}"
+        version="$CONFIG_VERSION"
+        if [ -z "$version" ] && [ -f "$file" ]; then version=$(cat "$file"); fi
+        echo "version=${version:-$default}" >> "$GITHUB_OUTPUT"

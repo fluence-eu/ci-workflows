@@ -95,8 +95,8 @@ Since `@v6`, per-project options live in a `.fluence-ci.yml` file at the consume
 Every key is optional unless noted — omitted keys fall back to the defaults shown:
 
 ```yaml
-ruby_version: '4.0'          # Ruby families (setup-ruby + caches)
-node_version: '20'           # vue-app-* default '20', npm-* default '22'
+ruby_version: ''             # Ruby families: empty = read `.ruby-version`, then '4.0'
+node_version: ''             # empty = read `.nvmrc`, then '20' (vue-app-*) or '22' (npm-*)
 pre_install_command: ''      # vue-app-*: shell run between setup-node and npm ci
 
 codequality:

@@ -87,13 +87,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Read .fluence-ci.yml
-        id: cfg
-        uses: fluence-eu/ci-workflows/actions/read-config@v6
-        with:
-          keys: |
-            ruby_version=ruby_version=4.0
-
       - name: Download PR security report
         uses: actions/download-artifact@v8
         with:
@@ -129,6 +122,12 @@ jobs:
             echo "ruby_audit=security-base/ruby_audit.txt" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Resolve Ruby version
+        id: ruby
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        with:
+          runtime: ruby
+
       - uses: ruby/setup-ruby@v1
         env:
           # Authenticate `bundle install` (triggered by bundler-cache: true)
@@ -138,7 +137,7 @@ jobs:
           # required scope; the env var hands it to Bundler.
           BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
         with:
-          ruby-version: ${{ fromJSON(steps.cfg.outputs.values).ruby_version }}
+          ruby-version: ${{ steps.ruby.outputs.version }}
           bundler-cache: true
 
       - id: body
