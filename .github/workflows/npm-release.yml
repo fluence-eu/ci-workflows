@@ -68,7 +68,6 @@ jobs:
         uses: fluence-eu/ci-workflows/actions/read-config@v6
         with:
           keys: |
-            node_version=node_version=22
             package_paths=release.package_paths=package.json
             notes_source=release.notes_source=changelog
             changelog_path=release.changelog_path=CHANGELOG.md
@@ -100,10 +99,18 @@ jobs:
           # release" step flips it once the assets are in place.
           draft: true
 
+      - name: Resolve Node version
+        id: node
+        if: steps.verify.outputs.is_release == 'true'
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        with:
+          runtime: node
+          default: '22'
+
       - uses: actions/setup-node@v6
         if: steps.verify.outputs.is_release == 'true'
         with:
-          node-version: ${{ fromJSON(steps.cfg.outputs.values).node_version }}
+          node-version: ${{ steps.node.outputs.version }}
 
       - name: Install dependencies and build
         if: steps.verify.outputs.is_release == 'true'
