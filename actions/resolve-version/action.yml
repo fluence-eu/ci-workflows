@@ -1,19 +1,14 @@
 name: Resolve version from config or file
 description: >
-  Resolves a runtime version with the precedence `.fluence-ci.yml` value >
-  version file > default. Must run after the consumer checkout so the
-  version file (e.g. `.nvmrc`, `.ruby-version`) is on the runner.
+  Resolves the runtime version with the precedence `.fluence-ci.yml` value >
+  version file > default. `runtime: node` reads the `node_version` key then
+  `.nvmrc`, falling back to '20'; `runtime: ruby` reads `ruby_version` then
+  `.ruby-version`, falling back to '4.0'. Must run after the consumer
+  checkout so the config and version files are on the runner.
 
 inputs:
-  config_version:
-    description: Version read from `.fluence-ci.yml` (empty when the file doesn't set it).
-    required: false
-    default: ''
-  file:
-    description: Version file read when `config_version` is empty (e.g. `.nvmrc`).
-    required: true
-  default:
-    description: Version used when `config_version` is empty and `file` doesn't exist.
+  runtime:
+    description: Runtime to resolve (`node` or `ruby`).
     required: true
 
 outputs:
@@ -24,13 +19,21 @@ outputs:
 runs:
   using: composite
   steps:
+    - id: cfg
+      uses: fluence-eu/ci-workflows/actions/read-config@v6
+      with:
+        keys: version=${{ inputs.runtime }}_version=
     - id: resolve
       shell: bash
       env:
-        CONFIG_VERSION: ${{ inputs.config_version }}
-        FILE: ${{ inputs.file }}
-        DEFAULT: ${{ inputs.default }}
+        RUNTIME: ${{ inputs.runtime }}
+        CONFIG_VERSION: ${{ fromJSON(steps.cfg.outputs.values).version }}
       run: |
+        case "$RUNTIME" in
+          node) file=.nvmrc default=20 ;;
+          ruby) file=.ruby-version default=4.0 ;;
+          *) echo "::error::unknown runtime '$RUNTIME'"; exit 1 ;;
+        esac
         version="$CONFIG_VERSION"
-        if [ -z "$version" ] && [ -f "$FILE" ]; then version=$(cat "$FILE"); fi
-        echo "version=${version:-$DEFAULT}" >> "$GITHUB_OUTPUT"
+        if [ -z "$version" ] && [ -f "$file" ]; then version=$(cat "$file"); fi
+        echo "version=${version:-$default}" >> "$GITHUB_OUTPUT"

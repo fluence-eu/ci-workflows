@@ -39,7 +39,6 @@ jobs:
         uses: fluence-eu/ci-workflows/actions/read-config@v6
         with:
           keys: |
-            node_version=node_version=
             pre_install_command=pre_install_command=
             lint_command=eslint.lint_command=npx --no-install eslint . --format json --output-file tmp/fluence-report/eslint.json
 
@@ -47,9 +46,7 @@ jobs:
         id: node
         uses: fluence-eu/ci-workflows/actions/resolve-version@v6
         with:
-          config_version: ${{ fromJSON(steps.cfg.outputs.values).node_version }}
-          file: .nvmrc
-          default: '20'
+          runtime: node
 
       - uses: actions/setup-node@v5
         with:

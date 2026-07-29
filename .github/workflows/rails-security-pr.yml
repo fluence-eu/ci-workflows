@@ -87,13 +87,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Read .fluence-ci.yml
-        id: cfg
-        uses: fluence-eu/ci-workflows/actions/read-config@v6
-        with:
-          keys: |
-            ruby_version=ruby_version=
-
       - name: Download PR security report
         uses: actions/download-artifact@v8
         with:
@@ -133,9 +126,7 @@ jobs:
         id: ruby
         uses: fluence-eu/ci-workflows/actions/resolve-version@v6
         with:
-          config_version: ${{ fromJSON(steps.cfg.outputs.values).ruby_version }}
-          file: .ruby-version
-          default: '4.0'
+          runtime: ruby
 
       - uses: ruby/setup-ruby@v1
         env:
