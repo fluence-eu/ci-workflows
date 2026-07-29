@@ -45,12 +45,11 @@ jobs:
 
       - name: Resolve Node version
         id: node
-        env:
-          CONFIG_VERSION: ${{ fromJSON(steps.cfg.outputs.values).node_version }}
-        run: |
-          version="$CONFIG_VERSION"
-          if [ -z "$version" ] && [ -f .nvmrc ]; then version=$(cat .nvmrc); fi
-          echo "version=${version:-20}" >> "$GITHUB_OUTPUT"
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        with:
+          config_version: ${{ fromJSON(steps.cfg.outputs.values).node_version }}
+          file: .nvmrc
+          default: '20'
 
       - uses: actions/setup-node@v5
         with:

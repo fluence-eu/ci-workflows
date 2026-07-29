@@ -1,0 +1,36 @@
+name: Resolve version from config or file
+description: >
+  Resolves a runtime version with the precedence `.fluence-ci.yml` value >
+  version file > default. Must run after the consumer checkout so the
+  version file (e.g. `.nvmrc`, `.ruby-version`) is on the runner.
+
+inputs:
+  config_version:
+    description: Version read from `.fluence-ci.yml` (empty when the file doesn't set it).
+    required: false
+    default: ''
+  file:
+    description: Version file read when `config_version` is empty (e.g. `.nvmrc`).
+    required: true
+  default:
+    description: Version used when `config_version` is empty and `file` doesn't exist.
+    required: true
+
+outputs:
+  version:
+    description: The resolved version.
+    value: ${{ steps.resolve.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - id: resolve
+      shell: bash
+      env:
+        CONFIG_VERSION: ${{ inputs.config_version }}
+        FILE: ${{ inputs.file }}
+        DEFAULT: ${{ inputs.default }}
+      run: |
+        version="$CONFIG_VERSION"
+        if [ -z "$version" ] && [ -f "$FILE" ]; then version=$(cat "$FILE"); fi
+        echo "version=${version:-$DEFAULT}" >> "$GITHUB_OUTPUT"
