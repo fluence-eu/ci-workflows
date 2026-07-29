@@ -2,9 +2,9 @@ name: Resolve version from config or file
 description: >
   Resolves the runtime version with the precedence `.fluence-ci.yml` value >
   version file > default. `runtime: node` reads the `node_version` key then
-  `.nvmrc`, falling back to '20'; `runtime: ruby` reads `ruby_version` then
-  `.ruby-version`, falling back to '4.0'. Must run after the consumer
-  checkout so the config and version files are on the runner.
+  `.node-version`, then `.nvmrc`, falling back to '20'; `runtime: ruby` reads
+  `ruby_version` then `.ruby-version`, falling back to '4.0'. Must run after
+  the consumer checkout so the config and version files are on the runner.
 
 inputs:
   runtime:
@@ -37,12 +37,20 @@ runs:
         CONFIG_VERSION: ${{ fromJSON(steps.cfg.outputs.values).version }}
         DEFAULT_OVERRIDE: ${{ inputs.default }}
       run: |
+        # Node ships two spellings of the same pin: `.node-version` (nodenv,
+        # asdf, Volta) and `.nvmrc` (nvm, fnm). Both are read, first match
+        # wins, so a repo carrying both stays consistent with the tools its
+        # contributors actually run.
         case "$RUNTIME" in
-          node) file=.nvmrc default=20 ;;
-          ruby) file=.ruby-version default=4.0 ;;
+          node) files=".node-version .nvmrc" default=20 ;;
+          ruby) files=".ruby-version" default=4.0 ;;
           *) echo "::error::unknown runtime '$RUNTIME'"; exit 1 ;;
         esac
         default="${DEFAULT_OVERRIDE:-$default}"
         version="$CONFIG_VERSION"
-        if [ -z "$version" ] && [ -f "$file" ]; then version=$(cat "$file"); fi
+        if [ -z "$version" ]; then
+          for file in $files; do
+            if [ -f "$file" ]; then version=$(cat "$file"); break; fi
+          done
+        fi
         echo "version=${version:-$default}" >> "$GITHUB_OUTPUT"
