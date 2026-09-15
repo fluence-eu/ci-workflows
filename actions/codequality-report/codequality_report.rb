@@ -3,8 +3,7 @@
 # Build a Markdown summary of reek + flog + flay findings for the
 # sticky PR comment. Mirrors the visual language of the other
 # *_report.rb scripts: header with delta vs baseline, per-tool
-# status table, prominent "new findings" section (reek), and
-# collapsed "all findings" section.
+# status table and a prominent "new findings" section (reek).
 #
 # Advisory mode — the workflow this composite is wired into does
 # NOT fail on findings. The comment surfaces deltas and trends so
@@ -20,6 +19,13 @@
 
 require 'json'
 require 'set'
+
+# Linux caps any single environment string at MAX_ARG_STRLEN (128 KiB)
+# and the runner hands this body to bash through the environment: at
+# 716 smells the unbounded render hit 134_071 bytes and died on E2BIG.
+NEW_SMELLS_SHOWN   = 50
+FLOG_ENTRIES_SHOWN = 25
+FLAY_BLOCKS_SHOWN  = 10
 
 reek_path      = ARGV[0] || 'reek.json'
 flog_path      = ARGV[1] || 'flog.txt'
@@ -96,11 +102,31 @@ def format_score_delta(diff)
   rounded.positive? ? ":red_circle: `+#{rounded}`" : ":green_circle: `#{rounded}`"
 end
 
-def reek_table(smells)
+def truncation_note(total, shown, noun)
+  return '' if total <= shown
+
+  "_Showing the first #{shown} of #{total} #{noun}._\n\n"
+end
+
+def truncate_flog(text)
+  lines   = text.strip.lines.map(&:chomp)
+  entries = lines.drop(2).reject(&:empty?)
+
+  [(lines.first(2) + [''] + entries.first(FLOG_ENTRIES_SHOWN)).join("\n"), entries.size]
+end
+
+def truncate_flay(text)
+  # Cutting by line would leave a duplication without the files it points at.
+  total, *blocks = text.strip.split(/\n{2,}/)
+
+  [([total] + blocks.first(FLAY_BLOCKS_SHOWN)).join("\n\n"), blocks.size]
+end
+
+def reek_table(smells, limit)
   rows = +''
   rows << "| Smell | File | Context | Lines | Message |\n"
   rows << "|---|---|---|---|---|\n"
-  smells.sort_by { |s| [s['smell_type'].to_s, s['source'].to_s, s['context'].to_s] }.each do |s|
+  smells.sort_by { |s| [s['smell_type'].to_s, s['source'].to_s, s['context'].to_s] }.first(limit).each do |s|
     source  = s['source'] || ''
     short   = source.sub(%r{^.*?/(?=lib/|app/)}, '')
     context = (s['context'] || '').to_s.gsub('|', '\\|')
@@ -187,8 +213,9 @@ md << "#{status_line}\n\n"
 
 if have_baseline && new_reek_smells.any?
   md << "<details open><summary>:mag: #{new_reek_smells.size} new reek smell#{new_reek_smells.size == 1 ? '' : 's'} introduced by this PR</summary>\n\n"
-  md << reek_table(new_reek_smells)
-  md << "\n</details>\n\n"
+  md << reek_table(new_reek_smells, NEW_SMELLS_SHOWN)
+  md << "\n#{truncation_note(new_reek_smells.size, NEW_SMELLS_SHOWN, 'smells')}"
+  md << "</details>\n\n"
 end
 
 if have_baseline && resolved_reek_count.positive?
@@ -197,29 +224,26 @@ if have_baseline && resolved_reek_count.positive?
   md << "</details>\n\n"
 end
 
-if pr_reek && pr_reek[:smells].any?
-  summary = have_baseline ? "All #{reek_count} reek smell#{reek_count == 1 ? '' : 's'} on this PR" : "Reek: #{reek_count} smell#{reek_count == 1 ? '' : 's'}"
-  md << "<details><summary>:mag: #{summary}</summary>\n\n"
-  md << reek_table(pr_reek[:smells])
-  md << "\n</details>\n\n"
-end
-
 if pr_flog && File.exist?(flog_path)
-  text = File.read(flog_path)
+  text, total = truncate_flog(File.read(flog_path))
   md << "<details><summary>:bar_chart: Flog complexity breakdown</summary>\n\n"
-  md << "```\n#{text.strip}\n```\n\n"
+  md << "```\n#{text}\n```\n\n"
+  md << truncation_note(total, FLOG_ENTRIES_SHOWN, 'methods')
   md << "</details>\n\n"
 end
 
 if pr_flay && File.exist?(flay_path)
-  text = File.read(flay_path)
+  text, total = truncate_flay(File.read(flay_path))
   md << "<details><summary>:bar_chart: Flay duplication breakdown</summary>\n\n"
-  md << "```\n#{text.strip}\n```\n\n"
+  md << "```\n#{text}\n```\n\n"
+  md << truncation_note(total, FLAY_BLOCKS_SHOWN, 'duplications')
   md << "</details>\n\n"
 end
 
-if pr_reek.nil? && pr_flog.nil? && pr_flay.nil?
+if all_pr_missing
   md << "_No tool output captured — verify reek, flog and flay are installed in the consumer's Gemfile._\n"
+else
+  md << "_Full reek, flog and flay reports: see the `codequality-report` artifact._\n"
 end
 
 print md
