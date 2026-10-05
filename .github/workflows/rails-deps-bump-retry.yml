@@ -209,7 +209,7 @@ jobs:
       - name: Wait for PR checks
         id: wait
         if: steps.fix.outputs.pushable == 'true'
-        uses: fluence-eu/ci-workflows/actions/deps-wait-checks@feat/rails-deps-bump
+        uses: fluence-eu/ci-workflows/actions/deps-wait-checks@v6
         with:
           pr: ${{ steps.fix.outputs.pr }}
           label: ${{ inputs.stage }}

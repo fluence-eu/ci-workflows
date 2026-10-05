@@ -89,7 +89,7 @@ jobs:
 
       - name: List outdated gems
         id: outdated
-        uses: fluence-eu/ci-workflows/actions/deps-outdated@feat/rails-deps-bump
+        uses: fluence-eu/ci-workflows/actions/deps-outdated@v6
         with:
           scope: ${{ inputs.scope }}
 
@@ -153,7 +153,7 @@ jobs:
       - name: Guard plan
         id: guard
         if: steps.outdated.outputs.count != '0'
-        uses: fluence-eu/ci-workflows/actions/deps-plan-guard@feat/rails-deps-bump
+        uses: fluence-eu/ci-workflows/actions/deps-plan-guard@v6
         with:
           plan: ${{ steps.claude.outputs.structured_output }}
           outdated_path: ${{ steps.outdated.outputs.path }}
@@ -391,7 +391,7 @@ jobs:
       - name: Wait for PR checks
         id: wait
         if: steps.pr.outputs.number && env.VERIFICATION == 'ci'
-        uses: fluence-eu/ci-workflows/actions/deps-wait-checks@feat/rails-deps-bump
+        uses: fluence-eu/ci-workflows/actions/deps-wait-checks@v6
         with:
           pr: ${{ steps.pr.outputs.number }}
           label: published
@@ -423,7 +423,7 @@ jobs:
       max-parallel: 2
       matrix:
         group: ${{ fromJSON(needs.plan.outputs.groups) }}
-    uses: fluence-eu/ci-workflows/.github/workflows/rails-deps-bump-retry.yml@feat/rails-deps-bump
+    uses: fluence-eu/ci-workflows/.github/workflows/rails-deps-bump-retry.yml@v6
     with:
       group: ${{ toJSON(matrix.group) }}
       stage: retry
@@ -452,7 +452,7 @@ jobs:
       max-parallel: 2
       matrix:
         group: ${{ fromJSON(needs.plan.outputs.groups) }}
-    uses: fluence-eu/ci-workflows/.github/workflows/rails-deps-bump-retry.yml@feat/rails-deps-bump
+    uses: fluence-eu/ci-workflows/.github/workflows/rails-deps-bump-retry.yml@v6
     with:
       group: ${{ toJSON(matrix.group) }}
       stage: last-retry
