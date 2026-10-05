@@ -8,7 +8,7 @@ on:
   workflow_call:
     inputs:
       stack:
-        description: '`rails` or `ruby-gem`, as passed to deps-bump.yml.'
+        description: '`rails`, `ruby-gem` or `vue-app`, as passed to deps-bump.yml.'
         required: true
         type: string
       group:
@@ -44,6 +44,8 @@ on:
         required: true
       FLUENCE_DEPS_BOT_PRIVATE_KEY:
         required: true
+      NPMRC_AUTH:
+        required: false
 
 permissions:
   contents: read
@@ -93,24 +95,30 @@ jobs:
 
       - name: Resolve Ruby version
         id: ruby
-        if: steps.prev.outputs.state == 'fail'
+        if: steps.prev.outputs.state == 'fail' && inputs.stack != 'vue-app'
         uses: fluence-eu/ci-workflows/actions/resolve-version@v6
         with:
           runtime: ruby
 
       - uses: ruby/setup-ruby@v1
-        if: steps.prev.outputs.state == 'fail'
+        if: steps.prev.outputs.state == 'fail' && inputs.stack != 'vue-app'
         with:
           ruby-version: ${{ steps.ruby.outputs.version }}
           bundler-cache: true
+
+      - name: Install npm dependencies
+        if: steps.prev.outputs.state == 'fail' && inputs.stack == 'vue-app'
+        uses: fluence-eu/ci-workflows/actions/deps-setup-node@v6
+        with:
+          npmrc-auth: ${{ secrets.NPMRC_AUTH }}
 
       - name: Prepare workspace
         if: steps.prev.outputs.state == 'fail'
         env:
           STACK: ${{ inputs.stack }}
         run: |
-          bundle config set --local deployment false
-          echo /vendor/bundle >> .git/info/exclude
+          if [ "$STACK" != vue-app ]; then bundle config set --local deployment false; fi
+          printf '%s\n' /vendor/bundle /node_modules >> .git/info/exclude
           git rev-parse HEAD > "$RUNNER_TEMP/deps/base_sha"
           if [ "$STACK" = rails ]; then bin/rails db:prepare || echo "::warning::db:prepare failed"; fi
 
@@ -126,7 +134,7 @@ jobs:
           claude_args: >-
             --max-turns 60
             --add-dir ${{ runner.temp }}/deps
-            --allowedTools "Read,Edit,Write,Grep,Glob,WebFetch(domain:github.com),WebFetch(domain:raw.githubusercontent.com),WebFetch(domain:rubygems.org),Bash(bundle:*),Bash(bin/rails:*),Bash(git add:*),Bash(git commit:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*)"
+            --allowedTools "Read,Edit,Write,Grep,Glob,WebFetch(domain:github.com),WebFetch(domain:raw.githubusercontent.com),WebFetch(domain:rubygems.org),WebFetch(domain:www.npmjs.com),WebFetch(domain:registry.npmjs.org),Bash(bundle:*),Bash(bin/rails:*),Bash(npm:*),Bash(npx:*),Bash(git add:*),Bash(git commit:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*)"
           prompt: |
             The PR checks failed after the bump of the group in
             ${{ runner.temp }}/deps/group.json.

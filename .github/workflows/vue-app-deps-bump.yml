@@ -1,0 +1,56 @@
+name: Vue App — Deps Bump
+
+# Family entry for Vue apps (npm): see deps-bump.yml.
+
+on:
+  workflow_call:
+    inputs:
+      scope:
+        description: Whitespace-separated npm package names to consider; empty considers every outdated package.
+        required: false
+        type: string
+        default: ''
+      allow_major:
+        description: Let the plan change a major version or go past a package.json range.
+        required: false
+        type: boolean
+        default: false
+      plan_only:
+        description: Publish the plan in the run summary without bumping anything.
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN:
+        description: OAuth token from `claude setup-token` (Pro/Max subscription).
+        required: true
+      FLUENCE_DEPS_BOT_PRIVATE_KEY:
+        description: Private key of the fluence-deps App, which reads private package changelogs and authors the PRs.
+        required: true
+      NPMRC_AUTH:
+        description: Multi-line .npmrc content for private npm registries, as for the vue-app-* workflows.
+        required: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deps:
+    uses: fluence-eu/ci-workflows/.github/workflows/deps-bump.yml@v6
+    with:
+      stack: vue-app
+      scope: ${{ inputs.scope }}
+      allow_major: ${{ inputs.allow_major }}
+      plan_only: ${{ inputs.plan_only }}
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      FLUENCE_DEPS_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_DEPS_BOT_PRIVATE_KEY }}
+      NPMRC_AUTH: ${{ secrets.NPMRC_AUTH }}
+    permissions:
+      contents: read
+      packages: read
+      checks: read
+      actions: read
+      statuses: read
+      pull-requests: read

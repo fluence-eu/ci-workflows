@@ -1,7 +1,7 @@
 name: Deps Bump
 
 # Internal, called by the family entries (rails-deps-bump.yml,
-# ruby-gem-deps-bump.yml). Claude groups the outdated dependencies (job `plan`,
+# ruby-gem-deps-bump.yml, vue-app-deps-bump.yml). Claude groups the outdated dependencies (job `plan`,
 # read-only) then bumps each group on its own `deps/<slug>/<stamp>` PR authored
 # by the fluence-deps App.
 
@@ -9,7 +9,7 @@ on:
   workflow_call:
     inputs:
       stack:
-        description: '`rails` (prepares and migrates the databases) or `ruby-gem`.'
+        description: '`rails` (prepares and migrates the databases), `ruby-gem` or `vue-app`.'
         required: true
         type: string
       scope:
@@ -34,6 +34,9 @@ on:
       FLUENCE_DEPS_BOT_PRIVATE_KEY:
         description: Private key of the fluence-deps App, which reads private gem changelogs and authors the PRs.
         required: true
+      NPMRC_AUTH:
+        description: Multi-line .npmrc content for private npm registries (vue-app only).
+        required: false
 
 permissions:
   contents: read
@@ -83,20 +86,47 @@ jobs:
 
       - name: Resolve Ruby version
         id: ruby
+        if: inputs.stack != 'vue-app'
         uses: fluence-eu/ci-workflows/actions/resolve-version@v6
         with:
           runtime: ruby
 
       - uses: ruby/setup-ruby@v1
+        if: inputs.stack != 'vue-app'
         with:
           ruby-version: ${{ steps.ruby.outputs.version }}
           bundler-cache: true
 
+      - name: Install npm dependencies
+        if: inputs.stack == 'vue-app'
+        uses: fluence-eu/ci-workflows/actions/deps-setup-node@v6
+        with:
+          npmrc-auth: ${{ secrets.NPMRC_AUTH }}
+
       - name: List outdated gems
-        id: outdated
+        id: gems
+        if: inputs.stack != 'vue-app'
         uses: fluence-eu/ci-workflows/actions/deps-outdated@v6
         with:
           scope: ${{ inputs.scope }}
+
+      - name: List outdated npm packages
+        id: npm
+        if: inputs.stack == 'vue-app'
+        uses: fluence-eu/ci-workflows/actions/deps-outdated-npm@v6
+        with:
+          scope: ${{ inputs.scope }}
+
+      - name: Merge outdated lists
+        id: outdated
+        env:
+          GEMS_PATH: ${{ steps.gems.outputs.path }}
+          GEMS_COUNT: ${{ steps.gems.outputs.count }}
+          NPM_PATH: ${{ steps.npm.outputs.path }}
+          NPM_COUNT: ${{ steps.npm.outputs.count }}
+        run: |
+          echo "path=${GEMS_PATH:-$NPM_PATH}" >> "$GITHUB_OUTPUT"
+          echo "count=${GEMS_COUNT:-$NPM_COUNT}" >> "$GITHUB_OUTPUT"
 
       # Read-only on every repo of the org: Claude reads changelogs from the
       # web here, so no write scope may be reachable in this job.
@@ -115,7 +145,7 @@ jobs:
         if: steps.outdated.outputs.count != '0'
         run: |
           schema='{"type":"object","required":["groups"],"properties":{"groups":{"type":"array","items":{"type":"object","required":["name","slug","gems","risk","rationale","skip_reason"],"properties":{"name":{"type":"string"},"slug":{"type":"string","pattern":"^[a-z0-9][a-z0-9-]{0,50}$"},"gems":{"type":"array","minItems":1,"items":{"type":"object","required":["name","target"],"properties":{"name":{"type":"string"},"target":{"type":"string"}}}},"risk":{"enum":["patch","minor","major"]},"rationale":{"type":"string"},"skip_reason":{"type":["string","null"]}}}}}}'
-          tools='Read,Grep,Glob,WebFetch(domain:github.com),WebFetch(domain:raw.githubusercontent.com),WebFetch(domain:rubygems.org),Bash(gh api repos/fluence-eu/:*)'
+          tools='Read,Grep,Glob,WebFetch(domain:github.com),WebFetch(domain:raw.githubusercontent.com),WebFetch(domain:rubygems.org),WebFetch(domain:www.npmjs.com),WebFetch(domain:registry.npmjs.org),Bash(gh api repos/fluence-eu/:*)'
           echo "value=--max-turns 80 --add-dir $RUNNER_TEMP/deps --allowedTools \"$tools\" --json-schema '$schema'" >> "$GITHUB_OUTPUT"
 
       - name: Plan with Claude
@@ -129,26 +159,29 @@ jobs:
           prompt: |
             You plan dependency bumps for this ${{ inputs.stack }} project. Do not modify any file.
 
-            The outdated gems are in ${{ steps.outdated.outputs.path }}
-            (`gems[]`: name, installed, newest, requested = Gemfile constraint).
+            The outdated dependencies (gems or npm packages, all listed under
+            `gems[]`) are in ${{ steps.outdated.outputs.path }}: name, installed,
+            newest, requested = Gemfile/gemspec constraint or package.json range,
+            wanted (npm only) = highest version that range allows.
             Major bumps or lifting a Gemfile constraint are allowed: ${{ inputs.allow_major }}.
 
             For each gem:
             1. Read its changelog / release notes between `installed` and `newest`
-               (GitHub releases, CHANGELOG.md, rubygems.org). Private fluence-eu
-               gems: `gh api repos/fluence-eu/<repo>/contents/CHANGELOG.md`.
+               (GitHub releases, CHANGELOG.md, rubygems.org, npmjs.com). Private
+               fluence-eu gems/packages: `gh api repos/fluence-eu/<repo>/contents/CHANGELOG.md`.
             2. Grep this app for the APIs the changelog says changed or were removed.
             3. Choose a `target`: `newest`, or the highest version you judge safe.
 
             Then build groups:
-            - Gems that must move together go in the same group (rails + railties,
-              rspec-*, a gem and its plugins). Groups must be independent of each
+            - Dependencies that must move together go in the same group (rails +
+              railties, rspec-*, vue + @vue/*, vite + its plugins, a package and its
+              @types/*). Groups must be independent of each
               other: each one is bumped on its own branch from the base branch.
             - Patch bumps of unrelated gems may share one group; each major bump
               gets its own group.
             - Set `skip_reason` (and keep the group) when a bump is not worth it
-              or not possible now: abandoned gem, requires a Ruby/Rails version
-              the app does not run, commercial licence change, etc.
+              or not possible now: abandoned package, requires a Ruby/Rails/Node
+              version the app does not run, commercial licence change, etc.
             - `slug`: lowercase, digits, dashes; it becomes the branch prefix `deps/<slug>/`.
             - `rationale`: in French, 1-3 sentences: what changes and what the app
               must adapt.
@@ -240,21 +273,30 @@ jobs:
 
       - name: Resolve Ruby version
         id: ruby
+        if: inputs.stack != 'vue-app'
         uses: fluence-eu/ci-workflows/actions/resolve-version@v6
         with:
           runtime: ruby
 
       - uses: ruby/setup-ruby@v1
+        if: inputs.stack != 'vue-app'
         with:
           ruby-version: ${{ steps.ruby.outputs.version }}
           bundler-cache: true
 
+      - name: Install npm dependencies
+        if: inputs.stack == 'vue-app'
+        uses: fluence-eu/ci-workflows/actions/deps-setup-node@v6
+        with:
+          npmrc-auth: ${{ secrets.NPMRC_AUTH }}
+
       - name: Prepare workspace
         env:
           GROUP: ${{ toJSON(matrix.group) }}
+          STACK: ${{ inputs.stack }}
         run: |
-          bundle config set --local deployment false
-          echo /vendor/bundle >> .git/info/exclude
+          if [ "$STACK" != vue-app ]; then bundle config set --local deployment false; fi
+          printf '%s\n' /vendor/bundle /node_modules >> .git/info/exclude
           mkdir -p "$RUNNER_TEMP/deps"
           printf '%s' "$GROUP" > "$RUNNER_TEMP/deps/group.json"
           git checkout -b "$BRANCH"
@@ -277,18 +319,22 @@ jobs:
           claude_args: >-
             --max-turns 100
             --add-dir ${{ runner.temp }}/deps
-            --allowedTools "Read,Edit,Write,Grep,Glob,WebFetch(domain:github.com),WebFetch(domain:raw.githubusercontent.com),WebFetch(domain:rubygems.org),Bash(bundle:*),Bash(bin/rails:*),Bash(git add:*),Bash(git commit:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*)"
+            --allowedTools "Read,Edit,Write,Grep,Glob,WebFetch(domain:github.com),WebFetch(domain:raw.githubusercontent.com),WebFetch(domain:rubygems.org),WebFetch(domain:www.npmjs.com),WebFetch(domain:registry.npmjs.org),Bash(bundle:*),Bash(bin/rails:*),Bash(npm:*),Bash(npx:*),Bash(git add:*),Bash(git commit:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*)"
           prompt: |
-            You bump one group of gems in this ${{ inputs.stack }} project. The group is in
+            You bump one group of dependencies in this ${{ inputs.stack }} project. The group is in
             ${{ runner.temp }}/deps/group.json (`gems[]`: name, installed, target;
             `rationale` summarises the changelog).
             Database prepared on the pre-bump state: ${{ steps.db.outcome }}
             (`skipped` = not a Rails app; `failure` = no usable database: skip
             migrations and say so in the PR body).
 
-            1. Run `bundle update <gems> --conservative`. Gemfile.lock must end on
-               exactly each `target`: edit the Gemfile constraint when `target`
-               does not satisfy it, or pin it when `bundle update` would go past it.
+            1. Ruby: run `bundle update <gems> --conservative`. Gemfile.lock must
+               end on exactly each `target`: edit the Gemfile constraint when
+               `target` does not satisfy it, or pin it when `bundle update` would
+               go past it.
+               npm: run `npm install <package>@<target>` per package (devDependencies
+               with `--save-dev`), keeping the range prefix package.json used.
+               package-lock.json is regenerated by npm, never edited by hand.
             2. Read the upgrade/migration guide of each gem between installed and
                target and apply every change this app needs (grep the usages).
                Run the gem's update generator when the guide requires one.
@@ -446,6 +492,7 @@ jobs:
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       FLUENCE_DEPS_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_DEPS_BOT_PRIVATE_KEY }}
+      NPMRC_AUTH: ${{ secrets.NPMRC_AUTH }}
     permissions:
       contents: read
       packages: read
@@ -476,6 +523,7 @@ jobs:
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       FLUENCE_DEPS_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_DEPS_BOT_PRIVATE_KEY }}
+      NPMRC_AUTH: ${{ secrets.NPMRC_AUTH }}
     permissions:
       contents: read
       packages: read
