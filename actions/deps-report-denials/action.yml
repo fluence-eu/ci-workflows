@@ -1,0 +1,18 @@
+name: Deps Report Denials
+description: Surface, as warnings, the tool calls Claude was refused in a claude-code-action run (hidden from the log unless show_full_output is on).
+
+inputs:
+  execution_file:
+    description: The `execution_file` output of anthropics/claude-code-action.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        EXECUTION_FILE: ${{ inputs.execution_file }}
+      run: |
+        [ -f "$EXECUTION_FILE" ] || exit 0
+        jq -r '.[] | select(.type == "result") | .permission_denials[]?
+               | "::warning::Claude was denied \(.tool_name): \(.tool_input | tostring | .[0:300])"' "$EXECUTION_FILE"
