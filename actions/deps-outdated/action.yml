@@ -26,7 +26,10 @@ runs:
         set -euo pipefail
         dir="$RUNNER_TEMP/deps"
         mkdir -p "$dir"
-        bundle outdated --parseable > "$dir/outdated.txt" || true
+        # setup-ruby's bundler-cache freezes the bundle (deployment), which
+        # makes `bundle outdated` refuse to run. Exit 1 only means "outdated".
+        bundle config set --local deployment false
+        bundle outdated --parseable > "$dir/outdated.txt" || [ $? -eq 1 ]
         ruby "${GITHUB_ACTION_PATH}/deps_outdated.rb" "$dir/outdated.txt" Gemfile.lock "$SCOPE" > "$dir/outdated.json"
         echo "path=$dir/outdated.json" >> "$GITHUB_OUTPUT"
         echo "count=$(jq '.gems | length' "$dir/outdated.json")" >> "$GITHUB_OUTPUT"
