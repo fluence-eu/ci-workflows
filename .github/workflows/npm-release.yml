@@ -111,6 +111,7 @@ jobs:
         if: steps.verify.outputs.is_release == 'true'
         with:
           node-version: ${{ steps.node.outputs.version }}
+          package-manager-cache: false
 
       - name: Install dependencies and build
         if: steps.verify.outputs.is_release == 'true'

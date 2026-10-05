@@ -57,6 +57,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ steps.node.outputs.version }}
+          package-manager-cache: false
           registry-url: "https://npm.pkg.github.com"
           # GitHub Packages requires scope == repo owner. Default to that.
           # The consumer may still override via the `release.scope` config
