@@ -8,7 +8,7 @@ on:
   workflow_call:
     inputs:
       stack:
-        description: '`rails`, `ruby-gem` or `vue-app`, as passed to deps-bump.yml.'
+        description: '`rails`, `ruby-gem`, `vue-app` or `npm`, as passed to deps-bump.yml.'
         required: true
         type: string
       group:
@@ -95,21 +95,22 @@ jobs:
 
       - name: Resolve Ruby version
         id: ruby
-        if: steps.prev.outputs.state == 'fail' && inputs.stack != 'vue-app'
+        if: steps.prev.outputs.state == 'fail' && !contains(fromJSON('["vue-app","npm"]'), inputs.stack)
         uses: fluence-eu/ci-workflows/actions/resolve-version@v6
         with:
           runtime: ruby
 
       - uses: ruby/setup-ruby@v1
-        if: steps.prev.outputs.state == 'fail' && inputs.stack != 'vue-app'
+        if: steps.prev.outputs.state == 'fail' && !contains(fromJSON('["vue-app","npm"]'), inputs.stack)
         with:
           ruby-version: ${{ steps.ruby.outputs.version }}
           bundler-cache: true
 
       - name: Install npm dependencies
-        if: steps.prev.outputs.state == 'fail' && inputs.stack == 'vue-app'
+        if: steps.prev.outputs.state == 'fail' && contains(fromJSON('["vue-app","npm"]'), inputs.stack)
         uses: fluence-eu/ci-workflows/actions/deps-setup-node@v6
         with:
+          node-default: ${{ inputs.stack == 'npm' && '22' || '' }}
           npmrc-auth: ${{ secrets.NPMRC_AUTH }}
 
       - name: Prepare workspace
@@ -117,7 +118,7 @@ jobs:
         env:
           STACK: ${{ inputs.stack }}
         run: |
-          if [ "$STACK" != vue-app ]; then bundle config set --local deployment false; fi
+          case "$STACK" in vue-app|npm) ;; *) bundle config set --local deployment false ;; esac
           printf '%s\n' /vendor/bundle /node_modules >> .git/info/exclude
           git rev-parse HEAD > "$RUNNER_TEMP/deps/base_sha"
           if [ "$STACK" = rails ]; then bin/rails db:prepare || echo "::warning::db:prepare failed"; fi
