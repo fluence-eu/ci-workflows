@@ -488,3 +488,30 @@ jobs:
             gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --add-label deps:unverified
           fi
           echo "::warning::$BRANCH ended $STATE — PR #$PR turned back into a draft"
+
+  cleanup:
+    name: Delete branches of closed deps PRs
+    if: ${{ !inputs.plan_only }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate fluence-deps token
+        id: token
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
+        with:
+          client-id: ${{ vars.FLUENCE_DEPS_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.FLUENCE_DEPS_BOT_PRIVATE_KEY }}
+
+      - name: Delete branches
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          AUTHOR: app/${{ steps.token.outputs.app-slug }}
+        run: |
+          set -euo pipefail
+          gh pr list --repo "$GITHUB_REPOSITORY" --author "$AUTHOR" --state all --limit 500 --json headRefName,state \
+            --jq 'map(select(.headRefName | startswith("deps/"))) | group_by(.headRefName)[]
+                  | select(all(.state != "OPEN")) | .[0].headRefName' |
+            while read -r branch; do
+              gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" --silent 2>/dev/null || continue
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$branch" --silent
+              echo "- deleted \`$branch\`" >> "$GITHUB_STEP_SUMMARY"
+            done
