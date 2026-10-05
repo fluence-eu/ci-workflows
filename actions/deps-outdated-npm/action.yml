@@ -28,6 +28,7 @@ runs:
         mkdir -p "$dir"
         # Exit 1 only means "outdated".
         npm outdated --json > "$dir/npm-outdated.json" || [ $? -eq 1 ]
-        ruby "${GITHUB_ACTION_PATH}/deps_outdated_npm.rb" "$dir/npm-outdated.json" package.json "$SCOPE" > "$dir/outdated.json"
+        npm query ':root, .workspace' > "$dir/npm-packages.json"
+        ruby "${GITHUB_ACTION_PATH}/deps_outdated_npm.rb" "$dir/npm-outdated.json" "$dir/npm-packages.json" "$SCOPE" > "$dir/outdated.json"
         echo "path=$dir/outdated.json" >> "$GITHUB_OUTPUT"
         echo "count=$(jq '.gems | length' "$dir/outdated.json")" >> "$GITHUB_OUTPUT"
