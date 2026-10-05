@@ -38,11 +38,17 @@ jobs:
   plan:
     name: Plan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+      pull-requests: read
     outputs:
-      groups: ${{ steps.guard.outputs.groups || '[]' }}
+      groups: ${{ steps.open.outputs.groups || '[]' }}
       verification: ${{ fromJSON(steps.cfg.outputs.values).verification }}
       base_branch: ${{ github.event.repository.default_branch }}
       stamp: ${{ steps.stamp.outputs.value }}
+      bot_name: ${{ steps.bot.outputs.name }}
+      bot_id: ${{ steps.bot.outputs.id }}
     env:
       BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -60,6 +66,15 @@ jobs:
         with:
           keys: |
             verification=deps.verification=ci
+
+      - name: Validate deps.verification
+        env:
+          VERIFICATION: ${{ fromJSON(steps.cfg.outputs.values).verification }}
+        run: |
+          case "$VERIFICATION" in
+            ci|none) ;;
+            *) echo "::error::.fluence-ci.yml deps.verification must be ci or none, got '$VERIFICATION'"; exit 1 ;;
+          esac
 
       - name: Resolve Ruby version
         id: ruby
@@ -96,7 +111,7 @@ jobs:
         run: |
           schema='{"type":"object","required":["groups"],"properties":{"groups":{"type":"array","items":{"type":"object","required":["name","slug","gems","risk","rationale","skip_reason"],"properties":{"name":{"type":"string"},"slug":{"type":"string","pattern":"^[a-z0-9][a-z0-9-]{0,50}$"},"gems":{"type":"array","minItems":1,"items":{"type":"object","required":["name","target"],"properties":{"name":{"type":"string"},"target":{"type":"string"}}}},"risk":{"enum":["patch","minor","major"]},"rationale":{"type":"string"},"skip_reason":{"type":["string","null"]}}}}}}'
           tools='Read,Grep,Glob,WebFetch(domain:github.com),WebFetch(domain:raw.githubusercontent.com),WebFetch(domain:rubygems.org),Bash(gh api repos/fluence-eu/:*)'
-          echo "value=--max-turns 80 --allowedTools \"$tools\" --json-schema '$schema'" >> "$GITHUB_OUTPUT"
+          echo "value=--max-turns 80 --add-dir $RUNNER_TEMP/deps --allowedTools \"$tools\" --json-schema '$schema'" >> "$GITHUB_OUTPUT"
 
       - name: Plan with Claude
         id: claude
@@ -143,6 +158,31 @@ jobs:
           plan: ${{ steps.claude.outputs.structured_output }}
           outdated_path: ${{ steps.outdated.outputs.path }}
           allow_major: ${{ inputs.allow_major }}
+
+      - name: Drop groups with an open deps PR
+        id: open
+        if: steps.outdated.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GROUPS_JSON: ${{ steps.guard.outputs.groups }}
+        run: |
+          set -euo pipefail
+          open=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 200 --json number,headRefName \
+            --jq '[.[] | select(.headRefName | startswith("deps/"))]')
+          jq -r --argjson open "$open" '.[] | .slug as $s | ($open[] | select(.headRefName | startswith("deps/\($s)/"))) as $pr
+            | "- **\(.name)**: PR #\($pr.number) already open, skipped"' <<<"$GROUPS_JSON" >> "$GITHUB_STEP_SUMMARY"
+          kept=$(jq -c --argjson open "$open" '[.[] | .slug as $s | select([$open[] | select(.headRefName | startswith("deps/\($s)/"))] | length == 0)]' <<<"$GROUPS_JSON")
+          echo "groups=$kept" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve fluence-deps git identity
+        id: bot
+        if: steps.outdated.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SLUG: ${{ steps.read-token.outputs.app-slug }}
+        run: |
+          echo "name=${SLUG}[bot]" >> "$GITHUB_OUTPUT"
+          echo "id=$(gh api "/users/${SLUG}%5Bbot%5D" --jq .id)" >> "$GITHUB_OUTPUT"
 
       - name: Report nothing to bump
         if: steps.outdated.outputs.count == '0'
