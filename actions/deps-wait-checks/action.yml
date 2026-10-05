@@ -1,0 +1,67 @@
+name: Deps Wait Checks
+description: Wait for a PR's checks on its head commit and collect failed logs plus the base branch's failing checks.
+
+inputs:
+  pr:
+    description: Pull request number.
+    required: true
+  attempt:
+    description: Attempt index, used to name the logs file.
+    required: true
+  base_branch:
+    description: Base branch whose latest commit's failing checks are listed as pre-existing.
+    required: true
+
+outputs:
+  state:
+    description: '`pass`, `fail`, or `none` when no check was reported within 10 minutes.'
+    value: ${{ steps.wait.outputs.state }}
+  logs:
+    description: Path of the failed-logs file (empty unless `state` is `fail`).
+    value: ${{ steps.wait.outputs.logs }}
+
+runs:
+  using: composite
+  steps:
+    - id: wait
+      shell: bash
+      env:
+        PR: ${{ inputs.pr }}
+        ATTEMPT: ${{ inputs.attempt }}
+        BASE_BRANCH: ${{ inputs.base_branch }}
+      run: |
+        set -uo pipefail
+        deadline=$((SECONDS + 600))
+        until [ "$(gh pr checks "$PR" --repo "$GITHUB_REPOSITORY" --json name --jq length 2>/dev/null || echo 0)" -gt 0 ]; do
+          if [ "$SECONDS" -ge "$deadline" ]; then
+            echo "state=none" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          sleep 15
+        done
+        # Workflows register their checks a few seconds apart; watching right
+        # after the first one appears would settle on a partial set.
+        sleep 60
+        if timeout 5400 gh pr checks "$PR" --repo "$GITHUB_REPOSITORY" --watch --interval 30 > /dev/null; then
+          echo "state=pass" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        logs="$RUNNER_TEMP/deps/failed-$ATTEMPT.log"
+        {
+          echo "# Failing checks on the PR"
+          gh pr checks "$PR" --repo "$GITHUB_REPOSITORY" --json bucket,name,link --jq '.[] | select(.bucket == "fail") | "\(.name)\t\(.link)"' |
+            while IFS=$'\t' read -r name link; do
+              echo "## $name"
+              if [[ "$link" =~ actions/runs/([0-9]+)/job/([0-9]+) ]]; then
+                gh run view "${BASH_REMATCH[1]}" --repo "$GITHUB_REPOSITORY" --job "${BASH_REMATCH[2]}" --log-failed 2>&1 | tail -n 300
+              else
+                echo "(not a GitHub Actions check: $link)"
+              fi
+            done
+          echo
+          echo "# Checks already failing on the latest $BASE_BRANCH commit"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$BASE_BRANCH/check-runs" --jq '.check_runs[] | select(.conclusion == "failure") | "- \(.name)"' || echo "(unavailable)"
+        } > "$logs"
+        echo "state=fail" >> "$GITHUB_OUTPUT"
+        echo "logs=$logs" >> "$GITHUB_OUTPUT"
