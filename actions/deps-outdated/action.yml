@@ -1,0 +1,35 @@
+name: Deps Outdated
+description: List the consumer's outdated gems as JSON, minus git/path-sourced gems, filtered by an optional scope.
+
+inputs:
+  scope:
+    description: Whitespace-separated gem names to keep; empty keeps every outdated gem.
+    required: false
+    default: ''
+
+outputs:
+  path:
+    description: Absolute path of the JSON file (`{gems:[{name,installed,newest,requested}], ignored:[{name,reason}]}`).
+    value: ${{ steps.list.outputs.path }}
+  count:
+    description: Number of entries in `gems`.
+    value: ${{ steps.list.outputs.count }}
+
+runs:
+  using: composite
+  steps:
+    - id: list
+      shell: bash
+      env:
+        SCOPE: ${{ inputs.scope }}
+      run: |
+        set -euo pipefail
+        dir="$RUNNER_TEMP/deps"
+        mkdir -p "$dir"
+        # setup-ruby's bundler-cache freezes the bundle (deployment), which
+        # makes `bundle outdated` refuse to run. Exit 1 only means "outdated".
+        bundle config set --local deployment false
+        bundle outdated --parseable > "$dir/outdated.txt" || [ $? -eq 1 ]
+        ruby "${GITHUB_ACTION_PATH}/deps_outdated.rb" "$dir/outdated.txt" Gemfile.lock "$SCOPE" > "$dir/outdated.json"
+        echo "path=$dir/outdated.json" >> "$GITHUB_OUTPUT"
+        echo "count=$(jq '.gems | length' "$dir/outdated.json")" >> "$GITHUB_OUTPUT"

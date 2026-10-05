@@ -80,6 +80,12 @@ jobs:
       FLUENCE_RELEASE_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}  # optional — skips release PRs
 ```
 
+### Deps bump (Claude)
+
+| Central workflow | Consumer file | Trigger | Role |
+|---|---|---|---|
+| `rails-deps-bump.yml` | `deps-bump.yml` | `workflow_dispatch` | Claude groups the outdated gems, bumps each group with its migration on a `deps/<slug>/<stamp>` PR authored by `fluence-deps[bot]`, then fixes what the app's PR checks report (2 attempts). Deletes branches of closed deps PRs. |
+
 ### Docs deploy
 
 | Central workflow | Consumer file | Trigger | Role |
@@ -115,6 +121,9 @@ tsc:
   typecheck_command: npx --no-install vue-tsc --noEmit
 vitest:
   test_command: npx --no-install vitest run --reporter=json --outputFile=tmp/fluence-report/vitest.json
+
+deps:
+  verification: ci           # rails-deps-bump: ci = iterate on the PR checks, none = draft PRs labelled deps:unverified
 
 release:
   gem_specs: my-gem-name     # REQUIRED by ruby-gem-{prepare-release,release}; multiline list for multi-gem
@@ -551,6 +560,51 @@ jobs:
       pull-requests: write
       actions: read
       packages: read
+```
+
+### Deps bump (Rails)
+
+Prerequisites: the fluence-deps App installed on the repo (Contents + Pull requests: write) and on the private gem repos (Contents: read). Apps whose PR checks run no tests set `deps.verification: none` in `.fluence-ci.yml`: PRs open as drafts labelled `deps:unverified`.
+
+```yaml
+# .github/workflows/deps-bump.yml
+name: Deps Bump
+
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: Gem names to consider (empty = all outdated)
+        required: false
+        type: string
+      allow_major:
+        description: Allow major bumps and Gemfile constraint changes
+        required: false
+        type: boolean
+        default: false
+      plan_only:
+        description: Publish the plan only
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  deps:
+    uses: fluence-eu/ci-workflows/.github/workflows/rails-deps-bump.yml@v6
+    with:
+      scope: ${{ inputs.scope }}
+      allow_major: ${{ inputs.allow_major }}
+      plan_only: ${{ inputs.plan_only }}
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      FLUENCE_DEPS_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_DEPS_BOT_PRIVATE_KEY }}
+    permissions:
+      contents: read
+      packages: read
+      checks: read
+      actions: read
+      statuses: read
+      pull-requests: read
 ```
 
 ---
