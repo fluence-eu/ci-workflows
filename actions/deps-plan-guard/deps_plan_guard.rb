@@ -34,10 +34,17 @@ def target_in_range?(target, installed, newest)
     Gem::Version.new(target) <= Gem::Version.new(newest)
 end
 
+def within_constraint?(gem, target)
+  # npm ranges (`^1.2`) aren't Gem::Requirement syntax; npm already resolved them into `wanted`.
+  return Gem::Version.new(target) <= Gem::Version.new(gem["wanted"]) if gem["wanted"]
+
+  requirement = gem["requested"].empty? ? Gem::Requirement.default : Gem::Requirement.new(*gem["requested"].split(", "))
+  requirement.satisfied_by?(Gem::Version.new(target))
+end
+
 def needs_major?(gem, target)
   major_change = Gem::Version.new(target).segments.first != Gem::Version.new(gem["installed"]).segments.first
-  requirement = gem["requested"].empty? ? Gem::Requirement.default : Gem::Requirement.new(*gem["requested"].split(", "))
-  major_change || !requirement.satisfied_by?(Gem::Version.new(target))
+  major_change || !within_constraint?(gem, target)
 end
 
 kept = []

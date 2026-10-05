@@ -1,0 +1,45 @@
+name: Deps Setup Node
+description: Install a Vue app's npm dependencies the way the vue-app-* workflows do (Node from resolve-version, `.fluence-ci.yml` pre_install_command, private registries, `npm ci`). Must run after the consumer checkout.
+
+inputs:
+  npmrc-auth:
+    description: Multi-line .npmrc content appended to `~/.npmrc` before `npm ci` (pass `secrets.NPMRC_AUTH`). Empty skips it.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Read .fluence-ci.yml
+      id: cfg
+      uses: fluence-eu/ci-workflows/actions/read-config@v6
+      with:
+        keys: |
+          pre_install_command=pre_install_command=
+
+    - name: Resolve Node version
+      id: node
+      uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+      with:
+        runtime: node
+
+    - uses: actions/setup-node@v7
+      with:
+        node-version: ${{ steps.node.outputs.version }}
+
+    - name: Pre-install setup
+      if: fromJSON(steps.cfg.outputs.values).pre_install_command != ''
+      shell: bash
+      env:
+        PRE_INSTALL_COMMAND: ${{ fromJSON(steps.cfg.outputs.values).pre_install_command }}
+      run: bash -c "$PRE_INSTALL_COMMAND"
+
+    - name: Configure private npm registries
+      if: inputs.npmrc-auth != ''
+      shell: bash
+      env:
+        NPMRC_AUTH: ${{ inputs.npmrc-auth }}
+      run: printf '%s\n' "$NPMRC_AUTH" >> "$HOME/.npmrc"
+
+    - shell: bash
+      run: npm ci
