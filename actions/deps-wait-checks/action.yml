@@ -5,8 +5,8 @@ inputs:
   pr:
     description: Pull request number.
     required: true
-  attempt:
-    description: Attempt index, used to name the logs file.
+  label:
+    description: Label used to name the logs file (e.g. `published`, `retry`).
     required: true
   base_branch:
     description: Base branch whose latest commit's failing checks are listed as pre-existing.
@@ -27,7 +27,7 @@ runs:
       shell: bash
       env:
         PR: ${{ inputs.pr }}
-        ATTEMPT: ${{ inputs.attempt }}
+        LABEL: ${{ inputs.label }}
         BASE_BRANCH: ${{ inputs.base_branch }}
       run: |
         set -uo pipefail
@@ -48,7 +48,7 @@ runs:
           124) echo "state=pending" >> "$GITHUB_OUTPUT"; exit 0 ;;
         esac
 
-        logs="$RUNNER_TEMP/deps/failed-$ATTEMPT.log"
+        logs="$RUNNER_TEMP/deps/failed-$LABEL.log"
         {
           echo "# Failing checks on the PR"
           gh pr checks "$PR" --repo "$GITHUB_REPOSITORY" --json bucket,name,link --jq '.[] | select(.bucket == "fail") | "\(.name)\t\(.link)"' |
