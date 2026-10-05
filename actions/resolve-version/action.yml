@@ -2,7 +2,7 @@ name: Resolve version from config or file
 description: >
   Resolves the runtime version with the precedence `.fluence-ci.yml` value >
   version file > default. `runtime: node` reads the `node_version` key then
-  `.node-version`, then `.nvmrc`, falling back to '20'; `runtime: ruby` reads
+  `.node-version`, then `.nvmrc`, falling back to '24'; `runtime: ruby` reads
   `ruby_version` then `.ruby-version`, falling back to '4.0'. Must run after
   the consumer checkout so the config and version files are on the runner.
 
@@ -14,7 +14,7 @@ inputs:
     description: >
       Replaces the runtime's built-in fallback when neither the config key
       nor the version file provides a value. The `npm-*` family passes '22'
-      to keep its historical default, which differs from the `vue-app-*` '20'.
+      to keep its historical default, which differs from the `vue-app-*` '24'.
     required: false
     default: ''
 
@@ -42,7 +42,7 @@ runs:
         # wins, so a repo carrying both stays consistent with the tools its
         # contributors actually run.
         case "$RUNTIME" in
-          node) files=".node-version .nvmrc" default=20 ;;
+          node) files=".node-version .nvmrc" default=24 ;;
           ruby) files=".ruby-version" default=4.0 ;;
           *) echo "::error::unknown runtime '$RUNTIME'"; exit 1 ;;
         esac
