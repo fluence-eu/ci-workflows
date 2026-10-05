@@ -85,6 +85,8 @@ jobs:
 | Central workflow | Consumer file | Trigger | Role |
 |---|---|---|---|
 | `rails-deps-bump.yml` | `deps-bump.yml` | `workflow_dispatch` | Claude groups the outdated gems, bumps each group with its migration on a `deps/<slug>/<stamp>` PR authored by `fluence-deps[bot]`, then fixes what the app's PR checks report (2 attempts). Deletes branches of closed deps PRs. |
+| `ruby-gem-deps-bump.yml` | `deps-bump.yml` | `workflow_dispatch` | Same as `rails-deps-bump.yml` for gems: no database; a runtime dependency's gemspec constraint only moves when the target requires it, flagged in the PR body. |
+| `vue-app-deps-bump.yml` | `deps-bump.yml` | `workflow_dispatch` | Same for Vue apps: `npm outdated`, `npm install <package>@<target>`, Node and private registries set up like the other vue-app-* workflows (optional `NPMRC_AUTH`). |
 
 ### Docs deploy
 
@@ -562,9 +564,9 @@ jobs:
       packages: read
 ```
 
-### Deps bump (Rails)
+### Deps bump (Rails, Ruby gem, Vue app)
 
-Prerequisites: the fluence-deps App installed on the repo (Contents + Pull requests: write) and on the private gem repos (Contents: read). Apps whose PR checks run no tests set `deps.verification: none` in `.fluence-ci.yml`: PRs open as drafts labelled `deps:unverified`.
+Prerequisites: the fluence-deps App installed on the repo (Contents + Pull requests: write) and on the private gem repos (Contents: read). Gems use the same wrapper with `ruby-gem-deps-bump.yml` in `uses:`; Vue apps with `vue-app-deps-bump.yml`, adding `NPMRC_AUTH: ${{ secrets.NPMRC_AUTH }}` under `secrets:` when they use private registries. Apps whose PR checks run no tests set `deps.verification: none` in `.fluence-ci.yml`: PRs open as drafts labelled `deps:unverified`.
 
 ```yaml
 # .github/workflows/deps-bump.yml

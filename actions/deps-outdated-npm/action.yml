@@ -1,0 +1,34 @@
+name: Deps Outdated (npm)
+description: List the consumer's outdated npm dependencies as JSON, minus git/path-sourced ones, filtered by an optional scope. Same shape as `deps-outdated`, plus `wanted` per entry.
+
+inputs:
+  scope:
+    description: Whitespace-separated package names to keep; empty keeps every outdated package.
+    required: false
+    default: ''
+
+outputs:
+  path:
+    description: Absolute path of the JSON file (`{gems:[{name,installed,newest,requested,wanted}], ignored:[{name,reason}]}`).
+    value: ${{ steps.list.outputs.path }}
+  count:
+    description: Number of entries in `gems`.
+    value: ${{ steps.list.outputs.count }}
+
+runs:
+  using: composite
+  steps:
+    - id: list
+      shell: bash
+      env:
+        SCOPE: ${{ inputs.scope }}
+      run: |
+        set -euo pipefail
+        dir="$RUNNER_TEMP/deps"
+        mkdir -p "$dir"
+        # Exit 1 only means "outdated".
+        npm outdated --json > "$dir/npm-outdated.json" || [ $? -eq 1 ]
+        npm query ':root, .workspace' > "$dir/npm-packages.json"
+        ruby "${GITHUB_ACTION_PATH}/deps_outdated_npm.rb" "$dir/npm-outdated.json" "$dir/npm-packages.json" "$SCOPE" > "$dir/outdated.json"
+        echo "path=$dir/outdated.json" >> "$GITHUB_OUTPUT"
+        echo "count=$(jq '.gems | length' "$dir/outdated.json")" >> "$GITHUB_OUTPUT"
