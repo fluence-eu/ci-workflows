@@ -14,7 +14,7 @@ inputs:
 
 outputs:
   state:
-    description: '`pass`, `fail`, or `none` when no check was reported within 10 minutes.'
+    description: '`pass`, `fail`, `none` when no check was reported within 10 minutes, or `pending` when checks were still running after 90 minutes.'
     value: ${{ steps.wait.outputs.state }}
   logs:
     description: Path of the failed-logs file (empty unless `state` is `fail`).
@@ -42,10 +42,11 @@ runs:
         # Workflows register their checks a few seconds apart; watching right
         # after the first one appears would settle on a partial set.
         sleep 60
-        if timeout 5400 gh pr checks "$PR" --repo "$GITHUB_REPOSITORY" --watch --interval 30 > /dev/null; then
-          echo "state=pass" >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
+        timeout 5400 gh pr checks "$PR" --repo "$GITHUB_REPOSITORY" --watch --interval 30 > /dev/null
+        case $? in
+          0) echo "state=pass" >> "$GITHUB_OUTPUT"; exit 0 ;;
+          124) echo "state=pending" >> "$GITHUB_OUTPUT"; exit 0 ;;
+        esac
 
         logs="$RUNNER_TEMP/deps/failed-$ATTEMPT.log"
         {
