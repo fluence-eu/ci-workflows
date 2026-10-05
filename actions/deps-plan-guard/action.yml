@@ -1,0 +1,35 @@
+name: Deps Plan Guard
+description: Validate and filter Claude's deps bump plan against the outdated list, publish it to the run summary, and output the kept groups.
+
+inputs:
+  plan:
+    description: Plan JSON produced by Claude (`structured_output`).
+    required: true
+  outdated_path:
+    description: Path of the `deps-outdated` JSON file.
+    required: true
+  allow_major:
+    description: '`true` lets a group change a major version or a Gemfile constraint.'
+    required: false
+    default: 'false'
+
+outputs:
+  groups:
+    description: Single-line JSON array of kept groups (`[{name,slug,risk,rationale,gems:[{name,installed,target}]}]`).
+    value: ${{ steps.guard.outputs.groups }}
+
+runs:
+  using: composite
+  steps:
+    - id: guard
+      shell: bash
+      env:
+        PLAN: ${{ inputs.plan }}
+        OUTDATED_PATH: ${{ inputs.outdated_path }}
+        ALLOW_MAJOR: ${{ inputs.allow_major }}
+      run: |
+        set -euo pipefail
+        printf '%s' "$PLAN" > "$RUNNER_TEMP/deps/plan.json"
+        groups="$(ruby "${GITHUB_ACTION_PATH}/deps_plan_guard.rb" "$RUNNER_TEMP/deps/plan.json" "$OUTDATED_PATH" "$ALLOW_MAJOR" "$RUNNER_TEMP/deps/summary.md")"
+        cat "$RUNNER_TEMP/deps/summary.md" >> "$GITHUB_STEP_SUMMARY"
+        echo "groups=$groups" >> "$GITHUB_OUTPUT"
