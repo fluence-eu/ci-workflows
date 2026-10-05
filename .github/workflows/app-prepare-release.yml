@@ -44,7 +44,7 @@ jobs:
 
       # Checks out the triggering ref — the consumer dispatches this from
       # its working branch, which is also where .fluence-ci.yml is read.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}

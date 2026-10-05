@@ -56,7 +56,7 @@ jobs:
           app-slug: ${{ steps.app-token.outputs.app-slug }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         if: steps.verify.outputs.is_release == 'true'
         with:
           fetch-depth: 0
@@ -107,10 +107,11 @@ jobs:
           runtime: node
           default: '22'
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         if: steps.verify.outputs.is_release == 'true'
         with:
           node-version: ${{ steps.node.outputs.version }}
+          package-manager-cache: false
 
       - name: Install dependencies and build
         if: steps.verify.outputs.is_release == 'true'

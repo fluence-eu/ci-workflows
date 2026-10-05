@@ -25,7 +25,7 @@ jobs:
       packages: write
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Read .fluence-ci.yml
         id: cfg
@@ -54,9 +54,10 @@ jobs:
           runtime: node
           default: '22'
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ steps.node.outputs.version }}
+          package-manager-cache: false
           registry-url: "https://npm.pkg.github.com"
           # GitHub Packages requires scope == repo owner. Default to that.
           # The consumer may still override via the `release.scope` config

@@ -54,7 +54,7 @@ jobs:
       # Checks out the pushed commit's ref — the consumer triggers this
       # on push to its working branch, which is also where
       # .fluence-ci.yml is read.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         if: steps.verify.outputs.is_release == 'true'
         with:
           fetch-depth: 0

@@ -37,7 +37,7 @@ jobs:
     outputs:
       security_outcome: ${{ steps.security.outcome }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Resolve Ruby version
         id: ruby

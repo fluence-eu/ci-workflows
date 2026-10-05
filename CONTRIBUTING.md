@@ -89,7 +89,7 @@ This protects against crafted commit messages that would otherwise be able to ex
 
 ### 5. Don't name well-known actions
 
-GitHub auto-generates nice step display names from each action's `action.yml` metadata (`actions/checkout@v6` → "Checkout", `ruby/setup-ruby@v1` → "Setup Ruby"). Adding `name: Checkout code` on such steps is noise — skip it unless the name adds information:
+GitHub auto-generates nice step display names from each action's `action.yml` metadata (`actions/checkout@v7` → "Checkout", `ruby/setup-ruby@v1` → "Setup Ruby"). Adding `name: Checkout code` on such steps is noise — skip it unless the name adds information:
 
 - Disambig (e.g. `Checkout consumer repo` vs `Checkout ci-workflows`)
 - Qualifying context (e.g. `Generate CI bot token (read-only access to ci-workflows)`)
