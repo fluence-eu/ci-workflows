@@ -32,7 +32,7 @@ jobs:
     outputs:
       eslint_outcome: ${{ steps.eslint.outcome }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Read .fluence-ci.yml
         id: cfg
