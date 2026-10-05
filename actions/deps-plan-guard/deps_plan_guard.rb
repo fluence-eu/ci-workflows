@@ -50,14 +50,23 @@ plan["groups"].each do |group|
     skipped << [group["name"], group["skip_reason"]]
     next
   end
+  if kept.any? { |other| other[:slug] == group["slug"] }
+    skipped << [group["name"], "duplicate slug #{group["slug"]}"]
+    next
+  end
 
+  in_group = []
   gems = group["gems"].filter_map do |entry|
     gem = known[entry["name"]]
     reason = if gem.nil? then "not in the outdated list"
              elsif used.include?(entry["name"]) then "already in another group"
+             elsif in_group.include?(entry["name"]) then "listed twice in the group"
              elsif !target_in_range?(entry["target"], gem["installed"], gem["newest"]) then "target #{entry["target"]} out of range"
              end
-    next { name: entry["name"], installed: gem["installed"], target: entry["target"] } unless reason
+    if reason.nil?
+      in_group << entry["name"]
+      next { name: entry["name"], installed: gem["installed"], target: entry["target"] }
+    end
 
     dropped << [entry["name"], reason]
     nil
