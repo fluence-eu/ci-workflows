@@ -55,7 +55,7 @@ jobs:
           bundler-cache: true
 
       - name: Cache rubocop analysis
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: tmp/rubocop
           # The cache must vary with anything that affects the binary
