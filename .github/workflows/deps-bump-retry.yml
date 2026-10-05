@@ -1,12 +1,16 @@
-name: Rails — Deps Bump Retry
+name: Deps Bump Retry
 
-# Internal to rails-deps-bump.yml: one retry for one group. Claude fixes
+# Internal to deps-bump.yml: one retry for one group. Claude fixes
 # on one runner, the App token pushes and waits on another (same split as the
 # bump/publish jobs of the caller).
 
 on:
   workflow_call:
     inputs:
+      stack:
+        description: '`rails` or `ruby-gem`, as passed to deps-bump.yml.'
+        required: true
+        type: string
       group:
         description: The group, as JSON (`{name, slug, risk, rationale, gems}`).
         required: true
@@ -102,11 +106,13 @@ jobs:
 
       - name: Prepare workspace
         if: steps.prev.outputs.state == 'fail'
+        env:
+          STACK: ${{ inputs.stack }}
         run: |
           bundle config set --local deployment false
           echo /vendor/bundle >> .git/info/exclude
           git rev-parse HEAD > "$RUNNER_TEMP/deps/base_sha"
-          bin/rails db:prepare || echo "::warning::db:prepare failed"
+          if [ "$STACK" = rails ]; then bin/rails db:prepare || echo "::warning::db:prepare failed"; fi
 
       - name: Fix with Claude
         if: steps.prev.outputs.state == 'fail'
