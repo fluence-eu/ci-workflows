@@ -1,7 +1,7 @@
 name: Deps Bump
 
 # Internal, called by the family entries (rails-deps-bump.yml,
-# ruby-gem-deps-bump.yml, vue-app-deps-bump.yml). Claude groups the outdated dependencies (job `plan`,
+# ruby-gem-deps-bump.yml, vue-app-deps-bump.yml, npm-deps-bump.yml). Claude groups the outdated dependencies (job `plan`,
 # read-only) then bumps each group on its own `deps/<slug>/<stamp>` PR authored
 # by the fluence-deps App.
 
@@ -9,7 +9,7 @@ on:
   workflow_call:
     inputs:
       stack:
-        description: '`rails` (prepares and migrates the databases), `ruby-gem` or `vue-app`.'
+        description: '`rails` (prepares and migrates the databases), `ruby-gem`, `vue-app` or `npm`.'
         required: true
         type: string
       scope:
@@ -35,7 +35,7 @@ on:
         description: Private key of the fluence-deps App, which reads private gem changelogs and authors the PRs.
         required: true
       NPMRC_AUTH:
-        description: Multi-line .npmrc content for private npm registries (vue-app only).
+        description: Multi-line .npmrc content for private npm registries (vue-app and npm only).
         required: false
 
 permissions:
@@ -86,33 +86,34 @@ jobs:
 
       - name: Resolve Ruby version
         id: ruby
-        if: inputs.stack != 'vue-app'
+        if: ${{ !contains(fromJSON('["vue-app","npm"]'), inputs.stack) }}
         uses: fluence-eu/ci-workflows/actions/resolve-version@v6
         with:
           runtime: ruby
 
       - uses: ruby/setup-ruby@v1
-        if: inputs.stack != 'vue-app'
+        if: ${{ !contains(fromJSON('["vue-app","npm"]'), inputs.stack) }}
         with:
           ruby-version: ${{ steps.ruby.outputs.version }}
           bundler-cache: true
 
       - name: Install npm dependencies
-        if: inputs.stack == 'vue-app'
+        if: contains(fromJSON('["vue-app","npm"]'), inputs.stack)
         uses: fluence-eu/ci-workflows/actions/deps-setup-node@v6
         with:
+          node-default: ${{ inputs.stack == 'npm' && '22' || '' }}
           npmrc-auth: ${{ secrets.NPMRC_AUTH }}
 
       - name: List outdated gems
         id: gems
-        if: inputs.stack != 'vue-app'
+        if: ${{ !contains(fromJSON('["vue-app","npm"]'), inputs.stack) }}
         uses: fluence-eu/ci-workflows/actions/deps-outdated@v6
         with:
           scope: ${{ inputs.scope }}
 
       - name: List outdated npm packages
         id: npm
-        if: inputs.stack == 'vue-app'
+        if: contains(fromJSON('["vue-app","npm"]'), inputs.stack)
         uses: fluence-eu/ci-workflows/actions/deps-outdated-npm@v6
         with:
           scope: ${{ inputs.scope }}
@@ -273,21 +274,22 @@ jobs:
 
       - name: Resolve Ruby version
         id: ruby
-        if: inputs.stack != 'vue-app'
+        if: ${{ !contains(fromJSON('["vue-app","npm"]'), inputs.stack) }}
         uses: fluence-eu/ci-workflows/actions/resolve-version@v6
         with:
           runtime: ruby
 
       - uses: ruby/setup-ruby@v1
-        if: inputs.stack != 'vue-app'
+        if: ${{ !contains(fromJSON('["vue-app","npm"]'), inputs.stack) }}
         with:
           ruby-version: ${{ steps.ruby.outputs.version }}
           bundler-cache: true
 
       - name: Install npm dependencies
-        if: inputs.stack == 'vue-app'
+        if: contains(fromJSON('["vue-app","npm"]'), inputs.stack)
         uses: fluence-eu/ci-workflows/actions/deps-setup-node@v6
         with:
+          node-default: ${{ inputs.stack == 'npm' && '22' || '' }}
           npmrc-auth: ${{ secrets.NPMRC_AUTH }}
 
       - name: Prepare workspace
@@ -295,7 +297,7 @@ jobs:
           GROUP: ${{ toJSON(matrix.group) }}
           STACK: ${{ inputs.stack }}
         run: |
-          if [ "$STACK" != vue-app ]; then bundle config set --local deployment false; fi
+          case "$STACK" in vue-app|npm) ;; *) bundle config set --local deployment false ;; esac
           printf '%s\n' /vendor/bundle /node_modules >> .git/info/exclude
           mkdir -p "$RUNNER_TEMP/deps"
           printf '%s' "$GROUP" > "$RUNNER_TEMP/deps/group.json"
@@ -344,6 +346,10 @@ jobs:
                Gem: change a runtime dependency's constraint in the *.gemspec only
                when `target` does not satisfy it, and flag it in the PR body: it
                changes what the gem's users can install.
+               npm package: widen a peerDependencies range only when `target`
+               requires it, and flag it in the PR body for the same reason. In a
+               workspaces monorepo, bump the package in every workspace that
+               declares it.
             4. Commit as you go, one commit per coherent change (bump,
                code migration, schema), Conventional Commits:
                `chore(deps): bump <gem> to <version>`, `fix(deps): adapt <what> to <gem> <version>`.

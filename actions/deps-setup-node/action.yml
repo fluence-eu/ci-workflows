@@ -1,7 +1,11 @@
 name: Deps Setup Node
-description: Install a Vue app's npm dependencies the way the vue-app-* workflows do (Node from resolve-version, `.fluence-ci.yml` pre_install_command, private registries, `npm ci`). Must run after the consumer checkout.
+description: Install a Node project's npm dependencies the way the vue-app-* and npm-* workflows do (Node from resolve-version, `.fluence-ci.yml` pre_install_command, private registries, `npm ci`). Must run after the consumer checkout.
 
 inputs:
+  node-default:
+    description: Node fallback when neither `.fluence-ci.yml` nor a version file sets it (`22` for the npm-* family, empty keeps resolve-version's own).
+    required: false
+    default: ''
   npmrc-auth:
     description: Multi-line .npmrc content appended to `~/.npmrc` before `npm ci` (pass `secrets.NPMRC_AUTH`). Empty skips it.
     required: false
@@ -22,6 +26,7 @@ runs:
       uses: fluence-eu/ci-workflows/actions/resolve-version@v6
       with:
         runtime: node
+        default: ${{ inputs.node-default }}
 
     - uses: actions/setup-node@v7
       with:
