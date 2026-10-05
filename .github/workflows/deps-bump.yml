@@ -308,7 +308,7 @@ jobs:
         id: db
         if: inputs.stack == 'rails'
         continue-on-error: true
-        run: bin/rails db:prepare
+        run: bin/rails db:create db:schema:load
 
       - name: Bump with Claude
         continue-on-error: true

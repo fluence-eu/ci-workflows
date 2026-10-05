@@ -121,7 +121,7 @@ jobs:
           case "$STACK" in vue-app|npm) ;; *) bundle config set --local deployment false ;; esac
           printf '%s\n' /vendor/bundle /node_modules >> .git/info/exclude
           git rev-parse HEAD > "$RUNNER_TEMP/deps/base_sha"
-          if [ "$STACK" = rails ]; then bin/rails db:prepare || echo "::warning::db:prepare failed"; fi
+          if [ "$STACK" = rails ]; then bin/rails db:create db:schema:load || echo "::warning::database setup failed"; fi
 
       - name: Fix with Claude
         if: steps.prev.outputs.state == 'fail'
