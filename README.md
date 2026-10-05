@@ -603,6 +603,7 @@ jobs:
       packages: read
       checks: read
       actions: read
+      statuses: read
       pull-requests: read
 ```
 
