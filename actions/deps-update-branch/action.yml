@@ -1,0 +1,50 @@
+name: Deps Update Branch
+description: Merge the base branch into a deps PR branch. Lockfile-only conflicts are resolved by regenerating the lockfile from the base one and checking the PR's bumped versions survived; any other conflict leaves the branch untouched. Produces a git bundle of the new commits for a job holding a write token to push.
+
+inputs:
+  base_branch:
+    description: Branch the PR targets.
+    required: true
+
+outputs:
+  state:
+    description: '`updated` (bundle ready to push) or `manual` (conflict needing a human).'
+    value: ${{ steps.update.outputs.state }}
+
+runs:
+  using: composite
+  steps:
+    - id: update
+      shell: bash
+      env:
+        BASE_BRANCH: ${{ inputs.base_branch }}
+      run: |
+        set -euo pipefail
+        dir="$RUNNER_TEMP/deps"
+        mkdir -p "$dir"
+        versions="${GITHUB_ACTION_PATH}/deps_lock_versions.rb"
+        git fetch -q origin "$BASE_BRANCH"
+        pr_head=$(git rev-parse HEAD)
+        merge_base=$(git merge-base HEAD "origin/$BASE_BRANCH")
+        echo "$pr_head" > "$dir/base_sha"
+        manual() { printf '%s\n' "$1" > "$dir/conflicts"; echo "state=manual" >> "$GITHUB_OUTPUT"; exit 0; }
+
+        if ! git merge -q --no-edit "origin/$BASE_BRANCH"; then
+          conflicted=$(git diff --name-only --diff-filter=U)
+          others=$(grep -vxE 'Gemfile\.lock|package-lock\.json' <<<"$conflicted" || true)
+          if [ -n "$others" ]; then git merge --abort; manual "$others"; fi
+          for lock in $conflicted; do git checkout --theirs -- "$lock"; done
+          if grep -qx 'Gemfile.lock' <<<"$conflicted"; then
+            bundle lock --update $(ruby "$versions" Gemfile.lock "$merge_base" "$pr_head" 2>/dev/null || true) --conservative
+          fi
+          if grep -qx 'package-lock.json' <<<"$conflicted"; then
+            npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          fi
+          for lock in $conflicted; do
+            drift=$(ruby "$versions" "$lock" "$merge_base" "$pr_head" 2>&1 >/dev/null) || { git merge --abort; manual "$lock (versions changed while regenerating: $drift)"; }
+          done
+          git add $conflicted
+          git commit -q --no-edit
+        fi
+        git bundle create "$dir/work.bundle" "$pr_head..HEAD"
+        echo "state=updated" >> "$GITHUB_OUTPUT"
