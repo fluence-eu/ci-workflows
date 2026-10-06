@@ -392,7 +392,12 @@ jobs:
             echo "::error::Claude produced no commit for $BRANCH"
             exit 1
           fi
-          [ -s "$RUNNER_TEMP/deps/pr-body.md" ] || printf '%s\n\n_Body généré par défaut : Claude n’a pas écrit de description._\n' "$RATIONALE" > "$RUNNER_TEMP/deps/pr-body.md"
+          [ -s "$RUNNER_TEMP/deps/pr-body.md" ] || printf '%s\n' "$RATIONALE" > "$RUNNER_TEMP/deps/pr-body.md"
+          # Consumer CONTRIBUTING files forbid AI attribution; Claude adds it anyway.
+          FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --msg-filter 'sed -E "/^co-authored-by:/Id; /generated with .*claude/Id" | git stripspace' "$base..$BRANCH" >/dev/null
+          for f in pr-title.txt pr-body.md; do
+            if [ -f "$RUNNER_TEMP/deps/$f" ]; then sed -E "/^co-authored-by:/Id; /generated with .*claude/Id" "$RUNNER_TEMP/deps/$f" | git stripspace > "$RUNNER_TEMP/deps/$f.clean" && mv "$RUNNER_TEMP/deps/$f.clean" "$RUNNER_TEMP/deps/$f"; fi
+          done
           git bundle create "$RUNNER_TEMP/deps/work.bundle" "$base..$BRANCH"
 
       - uses: actions/upload-artifact@v7
