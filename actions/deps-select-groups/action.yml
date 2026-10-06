@@ -16,6 +16,12 @@ outputs:
   groups:
     description: The kept groups, as JSON (`[]` when none).
     value: ${{ steps.select.outputs.groups }}
+  slugs:
+    description: The kept groups' slugs, as a JSON array — a scalar matrix keeps job names readable even when skipped.
+    value: ${{ steps.select.outputs.slugs }}
+  by_slug:
+    description: The kept groups as a JSON object keyed by slug.
+    value: ${{ steps.select.outputs.by_slug }}
 
 runs:
   using: composite
@@ -47,3 +53,5 @@ runs:
           fi
         done < <(jq -c '.[]' <<<"$GROUPS_JSON")
         echo "groups=$selected" >> "$GITHUB_OUTPUT"
+        echo "slugs=$(jq -c 'map(.slug)' <<<"$selected")" >> "$GITHUB_OUTPUT"
+        echo "by_slug=$(jq -c 'map({key: .slug, value: .}) | from_entries' <<<"$selected")" >> "$GITHUB_OUTPUT"

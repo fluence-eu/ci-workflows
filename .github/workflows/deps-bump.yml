@@ -52,6 +52,8 @@ jobs:
       pull-requests: read
     outputs:
       groups: ${{ steps.open.outputs.groups || '[]' }}
+      slugs: ${{ steps.open.outputs.slugs || '[]' }}
+      by_slug: ${{ steps.open.outputs.by_slug || '{}' }}
       verification: ${{ fromJSON(steps.cfg.outputs.values).verification }}
       base_branch: ${{ github.event.repository.default_branch }}
       stamp: ${{ steps.stamp.outputs.value }}
@@ -218,6 +220,8 @@ jobs:
             | "- **\(.name)**: PR #\($pr.number) already open, skipped"' <<<"$GROUPS_JSON" >> "$GITHUB_STEP_SUMMARY"
           kept=$(jq -c --argjson open "$open" '[.[] | .slug as $s | select([$open[] | select(.headRefName | startswith("deps/\($s)/"))] | length == 0)]' <<<"$GROUPS_JSON")
           echo "groups=$kept" >> "$GITHUB_OUTPUT"
+          echo "slugs=$(jq -c 'map(.slug)' <<<"$kept")" >> "$GITHUB_OUTPUT"
+          echo "by_slug=$(jq -c 'map({key: .slug, value: .}) | from_entries' <<<"$kept")" >> "$GITHUB_OUTPUT"
 
       - name: Resolve fluence-deps git identity
         id: bot
@@ -245,7 +249,7 @@ jobs:
   # retries' `fix` job, so no App write token is ever minted there: commits
   # travel as a git bundle artifact to jobs on fresh runners that push them.
   bump:
-    name: Bump ${{ matrix.group.name }}
+    name: Bump
     needs: plan
     if: needs.plan.outputs.groups != '[]' && !inputs.plan_only
     runs-on: ubuntu-latest
@@ -254,7 +258,7 @@ jobs:
       fail-fast: false
       max-parallel: 2
       matrix:
-        group: ${{ fromJSON(needs.plan.outputs.groups) }}
+        slug: ${{ fromJSON(needs.plan.outputs.slugs) }}
     services:
       postgres:
         image: postgres
@@ -270,7 +274,7 @@ jobs:
       QUEUE_DATABASE_URL: postgres://postgres:postgres@localhost:5432/deps_queue
       CACHE_DATABASE_URL: postgres://postgres:postgres@localhost:5432/deps_cache
       CABLE_DATABASE_URL: postgres://postgres:postgres@localhost:5432/deps_cable
-      BRANCH: deps/${{ matrix.group.slug }}/${{ needs.plan.outputs.stamp }}
+      BRANCH: deps/${{ matrix.slug }}/${{ needs.plan.outputs.stamp }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -299,7 +303,7 @@ jobs:
 
       - name: Prepare workspace
         env:
-          GROUP: ${{ toJSON(matrix.group) }}
+          GROUP: ${{ toJSON(fromJSON(needs.plan.outputs.by_slug)[matrix.slug]) }}
           STACK: ${{ inputs.stack }}
         run: |
           case "$STACK" in vue-app|npm) ;; *) bundle config set --local deployment false ;; esac
@@ -404,8 +408,8 @@ jobs:
       - name: Package commits
         id: package
         env:
-          RATIONALE: ${{ matrix.group.rationale }}
-          NAME: ${{ matrix.group.name }}
+          RATIONALE: ${{ fromJSON(needs.plan.outputs.by_slug)[matrix.slug].rationale }}
+          NAME: ${{ fromJSON(needs.plan.outputs.by_slug)[matrix.slug].name }}
         run: |
           base=$(cat "$RUNNER_TEMP/deps/base_sha")
           if [ "$(git rev-parse HEAD)" = "$base" ]; then
@@ -429,12 +433,12 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: steps.package.outputs.skipped != 'true'
         with:
-          name: deps-${{ matrix.group.slug }}-bumped
+          name: deps-${{ matrix.slug }}-bumped
           path: ${{ runner.temp }}/deps/
           retention-days: 1
 
   publish:
-    name: Publish ${{ matrix.group.name }}
+    name: Publish
     needs: [plan, bump]
     if: always() && needs.plan.result == 'success' && needs.plan.outputs.groups != '[]' && !inputs.plan_only
     runs-on: ubuntu-latest
@@ -449,9 +453,9 @@ jobs:
       fail-fast: false
       max-parallel: 2
       matrix:
-        group: ${{ fromJSON(needs.plan.outputs.groups) }}
+        slug: ${{ fromJSON(needs.plan.outputs.slugs) }}
     env:
-      BRANCH: deps/${{ matrix.group.slug }}/${{ needs.plan.outputs.stamp }}
+      BRANCH: deps/${{ matrix.slug }}/${{ needs.plan.outputs.stamp }}
       BASE_BRANCH: ${{ needs.plan.outputs.base_branch }}
       VERIFICATION: ${{ needs.plan.outputs.verification }}
       GH_TOKEN: ${{ github.token }}
@@ -461,7 +465,7 @@ jobs:
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
-          name: deps-${{ matrix.group.slug }}-bumped
+          name: deps-${{ matrix.slug }}-bumped
           path: ${{ runner.temp }}/deps
 
       - name: Read bump result
@@ -488,7 +492,7 @@ jobs:
         if: steps.dl.outcome == 'success'
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
-          FALLBACK_TITLE: 'chore(deps): ${{ matrix.group.name }}'
+          FALLBACK_TITLE: 'chore(deps): ${{ fromJSON(needs.plan.outputs.by_slug)[matrix.slug].name }}'
         run: |
           set -euo pipefail
           TITLE=$(head -n 1 "$RUNNER_TEMP/deps/pr-title.txt" 2>/dev/null || true)
@@ -529,7 +533,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: steps.pr.outputs.number
         with:
-          name: deps-${{ matrix.group.slug }}-published
+          name: deps-${{ matrix.slug }}-published
           path: ${{ runner.temp }}/deps/
           retention-days: 1
 
@@ -549,18 +553,18 @@ jobs:
           states: fail
 
   retry:
-    name: Retry ${{ matrix.group.name }}
+    name: Retry
     needs: [plan, to-retry]
     if: always() && needs.to-retry.outputs.groups != '[]' && needs.to-retry.outputs.groups != ''
     strategy:
       fail-fast: false
       max-parallel: 2
       matrix:
-        group: ${{ fromJSON(needs.to-retry.outputs.groups) }}
+        slug: ${{ fromJSON(needs.to-retry.outputs.slugs) }}
     uses: fluence-eu/ci-workflows/.github/workflows/deps-bump-retry.yml@v6
     with:
       stack: ${{ inputs.stack }}
-      group: ${{ toJSON(matrix.group) }}
+      group: ${{ toJSON(fromJSON(needs.to-retry.outputs.by_slug)[matrix.slug]) }}
       stage: retry
       from: published
       stamp: ${{ needs.plan.outputs.stamp }}
@@ -595,18 +599,18 @@ jobs:
           states: fail
 
   last-retry:
-    name: Last retry ${{ matrix.group.name }}
+    name: Last retry
     needs: [plan, to-last-retry]
     if: always() && needs.to-last-retry.outputs.groups != '[]' && needs.to-last-retry.outputs.groups != ''
     strategy:
       fail-fast: false
       max-parallel: 2
       matrix:
-        group: ${{ fromJSON(needs.to-last-retry.outputs.groups) }}
+        slug: ${{ fromJSON(needs.to-last-retry.outputs.slugs) }}
     uses: fluence-eu/ci-workflows/.github/workflows/deps-bump-retry.yml@v6
     with:
       stack: ${{ inputs.stack }}
-      group: ${{ toJSON(matrix.group) }}
+      group: ${{ toJSON(fromJSON(needs.to-last-retry.outputs.by_slug)[matrix.slug]) }}
       stage: last-retry
       from: retry-checked
       stamp: ${{ needs.plan.outputs.stamp }}
@@ -641,28 +645,28 @@ jobs:
           states: fail none pending
 
   finalize:
-    name: Finalize ${{ matrix.group.name }}
+    name: Finalize
     needs: [plan, to-finalize]
     if: always() && needs.to-finalize.outputs.groups != '[]' && needs.to-finalize.outputs.groups != ''
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        group: ${{ fromJSON(needs.to-finalize.outputs.groups) }}
+        slug: ${{ fromJSON(needs.to-finalize.outputs.slugs) }}
     env:
-      BRANCH: deps/${{ matrix.group.slug }}/${{ needs.plan.outputs.stamp }}
+      BRANCH: deps/${{ matrix.slug }}/${{ needs.plan.outputs.stamp }}
     steps:
       - name: Download states
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
-          pattern: deps-${{ matrix.group.slug }}-*
+          pattern: deps-${{ matrix.slug }}-*
           path: ${{ runner.temp }}/states
 
       - name: Resolve final state
         id: final
         env:
-          SLUG: ${{ matrix.group.slug }}
+          SLUG: ${{ matrix.slug }}
         run: |
           for i in last-retry-checked last-retry-fixed retry-checked retry-fixed published; do
             dir="$RUNNER_TEMP/states/deps-$SLUG-$i"
