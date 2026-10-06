@@ -23,7 +23,9 @@ runs:
         dir="$RUNNER_TEMP/deps"
         mkdir -p "$dir"
         versions="${GITHUB_ACTION_PATH}/deps_lock_versions.rb"
-        git fetch -q origin "$BASE_BRANCH"
+        # The caller checks out with fetch-depth 0 and no credentials: the base
+        # branch is already there, and a fetch would fail on a private repo.
+        git rev-parse -q --verify "origin/$BASE_BRANCH" >/dev/null || git fetch -q origin "$BASE_BRANCH"
         pr_head=$(git rev-parse HEAD)
         merge_base=$(git merge-base HEAD "origin/$BASE_BRANCH")
         echo "$pr_head" > "$dir/base_sha"
