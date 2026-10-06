@@ -88,7 +88,7 @@ jobs:
 | `ruby-gem-deps-bump.yml` | `deps-bump.yml` | `workflow_dispatch` | Same as `rails-deps-bump.yml` for gems: no database; a runtime dependency's gemspec constraint only moves when the target requires it, flagged in the PR body. |
 | `vue-app-deps-bump.yml` | `deps-bump.yml` | `workflow_dispatch` | Same for Vue apps: `npm outdated`, `npm install <package>@<target>`, Node and private registries set up like the other vue-app-* workflows (optional `NPMRC_AUTH`). |
 | `npm-deps-bump.yml` | `deps-bump.yml` | `workflow_dispatch` | Same for npm packages: workspaces monorepos supported (a dependency is bumped in every workspace declaring it); a `peerDependencies` range only widens when the target requires it, flagged in the PR body; Node defaults to 22 like the other npm-* workflows. |
-| `deps-merge.yml` | `deps-merge.yml` | `issue_comment` | A `/merge` comment on a `fluence-deps[bot]` PR, from a user whose id is listed in `deps.mergers`, waits for its checks and merges it with the fluence-deps App when they all pass — the App's `exempt` ruleset bypass skips every rule of that ruleset, approval included. A draft PR must be marked ready first. |
+| `deps-merge.yml` | `deps-merge.yml` | `issue_comment` | A `/merge` comment on a `fluence-deps[bot]` PR, from a user whose id is listed in `deps.mergers`, waits for its checks and merges it with the fluence-deps App when they all pass. A PR in conflict first gets the base branch merged in: lockfile-only conflicts are regenerated (the PR's bumped versions must survive), any other conflict is reported on the PR — the App's `exempt` ruleset bypass skips every rule of that ruleset, approval included. A draft PR must be marked ready first. |
 
 ### Docs deploy
 
@@ -631,6 +631,7 @@ jobs:
       FLUENCE_DEPS_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_DEPS_BOT_PRIVATE_KEY }}
     permissions:
       contents: read
+      packages: read
       pull-requests: read
       checks: read
       statuses: read

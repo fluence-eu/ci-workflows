@@ -11,16 +11,17 @@ permissions:
   contents: read
 
 jobs:
-  merge:
-    name: Merge
+  authorize:
+    name: Authorize
     if: github.event.issue.pull_request && github.event.issue.user.login == 'fluence-deps[bot]' && github.event.comment.body == '/merge'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: read
-      checks: read
-      statuses: read
-      actions: read
+    outputs:
+      branch: ${{ steps.pr.outputs.branch }}
+      sha: ${{ steps.pr.outputs.sha }}
+      mergeable: ${{ steps.pr.outputs.mergeable }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -44,21 +45,148 @@ jobs:
           echo "::error::user $COMMENTER_ID is not listed in .fluence-ci.yml deps.mergers"
           exit 1
 
-      - name: Generate fluence-deps token
-        id: token
+      # GitHub computes mergeability lazily: UNKNOWN until it has tried.
+      - name: Read PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.issue.number }}
+        run: |
+          for _ in $(seq 1 12); do
+            pr=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json headRefName,headRefOid,mergeable)
+            [ "$(jq -r .mergeable <<<"$pr")" != UNKNOWN ] && break
+            sleep 5
+          done
+          echo "branch=$(jq -r .headRefName <<<"$pr")" >> "$GITHUB_OUTPUT"
+          echo "sha=$(jq -r .headRefOid <<<"$pr")" >> "$GITHUB_OUTPUT"
+          echo "mergeable=$(jq -r .mergeable <<<"$pr")" >> "$GITHUB_OUTPUT"
+
+  # Regenerating a lockfile evaluates the branch's Gemfile, so no write token
+  # lives here: the merge job pushes the result.
+  update:
+    name: Update branch
+    needs: authorize
+    if: needs.authorize.outputs.mergeable == 'CONFLICTING'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    env:
+      BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
+    outputs:
+      state: ${{ steps.update.outputs.state }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.authorize.outputs.branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Configure git as fluence-deps
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "fluence-deps[bot]"
+          git config user.email "$(gh api '/users/fluence-deps%5Bbot%5D' --jq .id)+fluence-deps[bot]@users.noreply.github.com"
+
+      - name: Resolve Ruby version
+        id: ruby
+        if: hashFiles('Gemfile.lock') != ''
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        with:
+          runtime: ruby
+
+      - uses: ruby/setup-ruby@v1
+        if: hashFiles('Gemfile.lock') != ''
+        with:
+          ruby-version: ${{ steps.ruby.outputs.version }}
+
+      - name: Resolve Node version
+        id: node
+        if: hashFiles('package-lock.json') != ''
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        with:
+          runtime: node
+
+      - uses: actions/setup-node@v7
+        if: hashFiles('package-lock.json') != ''
+        with:
+          node-version: ${{ steps.node.outputs.version }}
+
+      - name: Merge the base branch
+        id: update
+        uses: fluence-eu/ci-workflows/actions/deps-update-branch@v6
+        with:
+          base_branch: ${{ github.event.repository.default_branch }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: deps-merge-update
+          path: ${{ runner.temp }}/deps/
+          retention-days: 1
+
+  merge:
+    name: Merge
+    needs: [authorize, update]
+    if: always() && needs.authorize.result == 'success' && needs.update.result != 'failure' && needs.update.result != 'cancelled'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+      statuses: read
+      actions: read
+    env:
+      PR: ${{ github.event.issue.number }}
+      BRANCH: ${{ needs.authorize.outputs.branch }}
+    steps:
+      - name: Download branch update
+        if: needs.update.result == 'success'
+        uses: actions/download-artifact@v8
+        with:
+          name: deps-merge-update
+          path: ${{ runner.temp }}/deps
+
+      - uses: actions/checkout@v7
+        if: needs.update.outputs.state == 'updated'
+        with:
+          ref: ${{ needs.authorize.outputs.sha }}
+          persist-credentials: false
+
+      - name: Generate fluence-deps token (push)
+        id: push-token
+        if: needs.update.result == 'success'
         uses: fluence-eu/ci-workflows/actions/release-app-token@v6
         with:
           client-id: ${{ vars.FLUENCE_DEPS_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_DEPS_BOT_PRIVATE_KEY }}
 
-      - name: Read head commit
-        id: head
+      - name: Report unresolved conflict
+        if: needs.update.outputs.state == 'manual'
         env:
-          GH_TOKEN: ${{ steps.token.outputs.token }}
-          PR: ${{ github.event.issue.number }}
+          GH_TOKEN: ${{ steps.push-token.outputs.token }}
         run: |
-          sha=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          {
+            echo "\`/merge\` impossible : conflit avec la branche de base qui ne se résout pas en régénérant les lockfiles."
+            echo
+            sed 's/^/- /' "$RUNNER_TEMP/deps/conflicts"
+            echo
+            echo "Relance le bump de ce groupe, ou résous le conflit à la main puis commente de nouveau \`/merge\`."
+          } > "$RUNNER_TEMP/comment.md"
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
+          echo "::error::unresolved conflict on #$PR"
+          exit 1
+
+      - name: Push the updated branch
+        id: push
+        if: needs.update.outputs.state == 'updated'
+        env:
+          GH_TOKEN: ${{ steps.push-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          git fetch -q "$RUNNER_TEMP/deps/work.bundle" "${BRANCH}:${BRANCH}"
+          git push -q "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${BRANCH}:refs/heads/${BRANCH}"
+          echo "sha=$(git rev-parse "$BRANCH")" >> "$GITHUB_OUTPUT"
 
       - name: Wait for PR checks
         id: wait
@@ -70,12 +198,18 @@ jobs:
           label: merge
           base_branch: ${{ github.event.repository.default_branch }}
 
+      - name: Generate fluence-deps token (merge)
+        id: token
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
+        with:
+          client-id: ${{ vars.FLUENCE_DEPS_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.FLUENCE_DEPS_BOT_PRIVATE_KEY }}
+
       - name: Merge
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
-          PR: ${{ github.event.issue.number }}
           STATE: ${{ steps.wait.outputs.state }}
-          SHA: ${{ steps.head.outputs.sha }}
+          SHA: ${{ steps.push.outputs.sha || needs.authorize.outputs.sha }}
         run: |
           if [ "$STATE" != pass ]; then
             echo "::error::checks of #$PR ended in state $STATE"
