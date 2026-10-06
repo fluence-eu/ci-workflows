@@ -631,6 +631,10 @@ jobs:
       FLUENCE_DEPS_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_DEPS_BOT_PRIVATE_KEY }}
     permissions:
       contents: read
+      pull-requests: read
+      checks: read
+      statuses: read
+      actions: read
 ```
 
 ---
