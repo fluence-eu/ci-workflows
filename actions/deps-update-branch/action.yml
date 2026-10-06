@@ -8,7 +8,7 @@ inputs:
 
 outputs:
   state:
-    description: '`updated` (bundle ready to push) or `manual` (conflict needing a human).'
+    description: '`updated` (bundle ready to push), `current` (already up to date) or `manual` (conflict needing a human).'
     value: ${{ steps.update.outputs.state }}
 
 runs:
@@ -45,6 +45,10 @@ runs:
           done
           git add $conflicted
           git commit -q --no-edit
+        fi
+        if [ "$(git rev-parse HEAD)" = "$pr_head" ]; then
+          echo "state=current" >> "$GITHUB_OUTPUT"
+          exit 0
         fi
         git bundle create "$dir/work.bundle" "$pr_head..HEAD"
         echo "state=updated" >> "$GITHUB_OUTPUT"
