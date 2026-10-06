@@ -150,10 +150,12 @@ jobs:
           name: deps-merge-update
           path: ${{ runner.temp }}/deps
 
+      # The bundle's merge commit brings in the base branch: its history must be here.
       - uses: actions/checkout@v7
         if: needs.update.outputs.state == 'updated'
         with:
           ref: ${{ needs.authorize.outputs.sha }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Generate fluence-deps token (push)
