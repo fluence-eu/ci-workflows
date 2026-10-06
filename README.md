@@ -129,6 +129,7 @@ vitest:
 deps:
   verification: ci           # rails-deps-bump: ci = iterate on the PR checks, none = draft PRs labelled deps:unverified
   mergers: []                # deps-merge: list of GitHub user ids (`gh api users/<login> --jq .id`) allowed to `/merge` a deps PR; empty = nobody
+  smoke_commands: ''         # deps bump: extra commands (one per line, e.g. `bin/rails runner 1`) whose stderr is compared before/after a bump; any new warning fails the group. rubocop runs by default when `.rubocop.yml` exists
 
 release:
   gem_specs: my-gem-name     # REQUIRED by ruby-gem-{prepare-release,release}; multiline list for multi-gem

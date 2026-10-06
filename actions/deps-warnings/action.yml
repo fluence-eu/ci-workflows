@@ -1,0 +1,41 @@
+name: Deps Warnings
+description: Run the smoke commands and record the lines they print on stderr (deprecations, obsolete config). With `baseline`, fail when lines appear that the baseline did not have.
+
+inputs:
+  commands:
+    description: Smoke commands, one per line.
+    required: true
+  file:
+    description: Where to write the recorded warnings.
+    required: true
+  baseline:
+    description: Warnings recorded before the bump; when set, any new line fails the step.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        COMMANDS: ${{ inputs.commands }}
+        FILE: ${{ inputs.file }}
+        BASELINE: ${{ inputs.baseline }}
+      run: |
+        set -uo pipefail
+        mkdir -p "$(dirname "$FILE")"
+        : > "$FILE"
+        while IFS= read -r cmd; do
+          [ -z "${cmd//[[:space:]]/}" ] && continue
+          echo "::group::$cmd"
+          bash -c "$cmd" 2>&1 >/dev/null | sed -e "s#$PWD#.#g" | grep -v '^[[:space:]]*$' | tee -a "$FILE"
+          echo "::endgroup::"
+        done <<< "$COMMANDS"
+        sort -u -o "$FILE" "$FILE"
+        [ -n "$BASELINE" ] || exit 0
+        new=$(comm -13 "$BASELINE" "$FILE")
+        [ -z "$new" ] && exit 0
+        echo "::error::the bump introduces warnings that were not there before; fix them (config or code) in the same change"
+        printf '%s\n' "$new" | sed 's/^/  /'
+        { echo "### New warnings"; echo; echo '```'; printf '%s\n' "$new"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+        exit 1
