@@ -33,12 +33,11 @@ jobs:
         env:
           MERGERS: ${{ fromJSON(steps.cfg.outputs.values).mergers }}
           COMMENTER_ID: ${{ github.event.comment.user.id }}
-          COMMENTER: ${{ github.event.comment.user.login }}
         run: |
           for id in $MERGERS; do
             if [ "$id" = "$COMMENTER_ID" ]; then exit 0; fi
           done
-          echo "::error::$COMMENTER ($COMMENTER_ID) is not listed in .fluence-ci.yml deps.mergers"
+          echo "::error::user $COMMENTER_ID is not listed in .fluence-ci.yml deps.mergers"
           exit 1
 
       - name: Generate fluence-deps token
