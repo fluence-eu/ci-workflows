@@ -88,6 +88,7 @@ jobs:
 | `ruby-gem-deps-bump.yml` | `deps-bump.yml` | `workflow_dispatch` | Same as `rails-deps-bump.yml` for gems: no database; a runtime dependency's gemspec constraint only moves when the target requires it, flagged in the PR body. |
 | `vue-app-deps-bump.yml` | `deps-bump.yml` | `workflow_dispatch` | Same for Vue apps: `npm outdated`, `npm install <package>@<target>`, Node and private registries set up like the other vue-app-* workflows (optional `NPMRC_AUTH`). |
 | `npm-deps-bump.yml` | `deps-bump.yml` | `workflow_dispatch` | Same for npm packages: workspaces monorepos supported (a dependency is bumped in every workspace declaring it); a `peerDependencies` range only widens when the target requires it, flagged in the PR body; Node defaults to 22 like the other npm-* workflows. |
+| `deps-merge.yml` | `deps-merge.yml` | `issue_comment` | A `/merge` comment on a `fluence-deps[bot]` PR, from a login listed in `deps.mergers`, waits for its checks and merges it with the fluence-deps App when they all pass — the App's `exempt` ruleset bypass skips every rule of that ruleset, approval included. A draft PR must be marked ready first. |
 
 ### Docs deploy
 
@@ -127,6 +128,7 @@ vitest:
 
 deps:
   verification: ci           # rails-deps-bump: ci = iterate on the PR checks, none = draft PRs labelled deps:unverified
+  mergers: []                # deps-merge: list of GitHub logins allowed to `/merge` a deps PR; empty = nobody
 
 release:
   gem_specs: my-gem-name     # REQUIRED by ruby-gem-{prepare-release,release}; multiline list for multi-gem
@@ -608,6 +610,27 @@ jobs:
       actions: read
       statuses: read
       pull-requests: read
+```
+
+### Deps merge
+
+Prerequisites: the fluence-deps App listed as an `exempt` bypass actor of the default branch ruleset, and the logins allowed to merge in `.fluence-ci.yml` `deps.mergers`. The list is read from the default branch, so a deps PR cannot change who merges it.
+
+```yaml
+# .github/workflows/deps-merge.yml
+name: Deps Merge
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  merge:
+    uses: fluence-eu/ci-workflows/.github/workflows/deps-merge.yml@v6
+    secrets:
+      FLUENCE_DEPS_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_DEPS_BOT_PRIVATE_KEY }}
+    permissions:
+      contents: read
 ```
 
 ---
