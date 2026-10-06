@@ -1,0 +1,15 @@
+name: Deps Check Scope
+description: Fail when the commits since the base commit add or remove a direct dependency (Gemfile.lock DEPENDENCIES, root package.json), which a bump must never do.
+
+inputs:
+  base-file:
+    description: File holding the commit the bump started from.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        BASE_FILE: ${{ inputs.base-file }}
+      run: ruby "${GITHUB_ACTION_PATH}/deps_check_scope.rb" "$BASE_FILE"

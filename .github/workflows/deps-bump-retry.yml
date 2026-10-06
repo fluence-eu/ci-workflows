@@ -146,7 +146,7 @@ jobs:
 
             Fix only what the bump broke. A check already failing on the base
             branch, or a failure unrelated to the bumped gems, is not yours: do
-            not touch it. Commit each fix following CONTRIBUTING.md's commit
+            not touch it. Never add or remove a direct dependency. Commit each fix following CONTRIBUTING.md's commit
             convention (Conventional Commits with the `deps` scope without one).
             Overwrite ${{ runner.temp }}/deps/analysis.md, in French: what failed,
             what you changed, what you deliberately left alone and why.
@@ -161,6 +161,12 @@ jobs:
         uses: fluence-eu/ci-workflows/actions/deps-report-denials@v6
         with:
           execution_file: ${{ steps.claude.outputs.execution_file }}
+
+      - name: Check dependency scope
+        if: steps.prev.outputs.state == 'fail'
+        uses: fluence-eu/ci-workflows/actions/deps-check-scope@v6
+        with:
+          base-file: ${{ runner.temp }}/deps/base_sha
 
       - name: Package commits
         if: steps.prev.outputs.state == 'fail'
