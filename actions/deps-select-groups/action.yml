@@ -1,0 +1,49 @@
+name: Deps Select Groups
+description: Keep the plan's groups whose latest recorded state (from the `deps-<slug>-<stage>` artifacts) is one of the given states.
+
+inputs:
+  groups:
+    description: The plan's groups, as JSON.
+    required: true
+  stages:
+    description: Space-separated artifact stages, most recent first; the first one found gives the group's state.
+    required: true
+  states:
+    description: Space-separated states to keep (e.g. `fail none pending`).
+    required: true
+
+outputs:
+  groups:
+    description: The kept groups, as JSON (`[]` when none).
+    value: ${{ steps.select.outputs.groups }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@v8
+      continue-on-error: true
+      with:
+        pattern: deps-*
+        path: ${{ runner.temp }}/deps-states
+
+    - id: select
+      shell: bash
+      env:
+        GROUPS_JSON: ${{ inputs.groups }}
+        STAGES: ${{ inputs.stages }}
+        STATES: ${{ inputs.states }}
+      run: |
+        set -euo pipefail
+        selected='[]'
+        while read -r group; do
+          slug=$(jq -r .slug <<<"$group")
+          state=''
+          for stage in $STAGES; do
+            file="$RUNNER_TEMP/deps-states/deps-$slug-$stage/state"
+            if [ -f "$file" ]; then state=$(cat "$file"); break; fi
+          done
+          if [ -n "$state" ] && [[ " $STATES " == *" $state "* ]]; then
+            selected=$(jq -c --argjson group "$group" '. + [$group]' <<<"$selected")
+          fi
+        done < <(jq -c '.[]' <<<"$GROUPS_JSON")
+        echo "groups=$selected" >> "$GITHUB_OUTPUT"

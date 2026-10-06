@@ -489,15 +489,30 @@ jobs:
           path: ${{ runner.temp }}/deps/
           retention-days: 1
 
-  retry:
-    name: Retry ${{ matrix.group.name }}
+  to-retry:
+    name: Select groups to retry
     needs: [plan, publish]
     if: always() && needs.plan.result == 'success' && needs.plan.outputs.groups != '[]' && !inputs.plan_only
+    runs-on: ubuntu-latest
+    outputs:
+      groups: ${{ steps.select.outputs.groups }}
+    steps:
+      - id: select
+        uses: fluence-eu/ci-workflows/actions/deps-select-groups@v6
+        with:
+          groups: ${{ needs.plan.outputs.groups }}
+          stages: published
+          states: fail
+
+  retry:
+    name: Retry ${{ matrix.group.name }}
+    needs: [plan, to-retry]
+    if: always() && needs.to-retry.outputs.groups != '[]' && needs.to-retry.outputs.groups != ''
     strategy:
       fail-fast: false
       max-parallel: 2
       matrix:
-        group: ${{ fromJSON(needs.plan.outputs.groups) }}
+        group: ${{ fromJSON(needs.to-retry.outputs.groups) }}
     uses: fluence-eu/ci-workflows/.github/workflows/deps-bump-retry.yml@v6
     with:
       stack: ${{ inputs.stack }}
@@ -520,15 +535,30 @@ jobs:
       statuses: read
       pull-requests: read
 
-  last-retry:
-    name: Last retry ${{ matrix.group.name }}
+  to-last-retry:
+    name: Select groups for a last retry
     needs: [plan, retry]
     if: always() && needs.plan.result == 'success' && needs.plan.outputs.groups != '[]' && !inputs.plan_only
+    runs-on: ubuntu-latest
+    outputs:
+      groups: ${{ steps.select.outputs.groups }}
+    steps:
+      - id: select
+        uses: fluence-eu/ci-workflows/actions/deps-select-groups@v6
+        with:
+          groups: ${{ needs.plan.outputs.groups }}
+          stages: retry-checked
+          states: fail
+
+  last-retry:
+    name: Last retry ${{ matrix.group.name }}
+    needs: [plan, to-last-retry]
+    if: always() && needs.to-last-retry.outputs.groups != '[]' && needs.to-last-retry.outputs.groups != ''
     strategy:
       fail-fast: false
       max-parallel: 2
       matrix:
-        group: ${{ fromJSON(needs.plan.outputs.groups) }}
+        group: ${{ fromJSON(needs.to-last-retry.outputs.groups) }}
     uses: fluence-eu/ci-workflows/.github/workflows/deps-bump-retry.yml@v6
     with:
       stack: ${{ inputs.stack }}
@@ -551,15 +581,30 @@ jobs:
       statuses: read
       pull-requests: read
 
-  finalize:
-    name: Finalize ${{ matrix.group.name }}
+  to-finalize:
+    name: Select PRs to turn back into drafts
     needs: [plan, publish, retry, last-retry]
     if: always() && needs.plan.result == 'success' && needs.plan.outputs.groups != '[]' && !inputs.plan_only
+    runs-on: ubuntu-latest
+    outputs:
+      groups: ${{ steps.select.outputs.groups }}
+    steps:
+      - id: select
+        uses: fluence-eu/ci-workflows/actions/deps-select-groups@v6
+        with:
+          groups: ${{ needs.plan.outputs.groups }}
+          stages: last-retry-checked last-retry-fixed retry-checked retry-fixed published
+          states: fail none pending
+
+  finalize:
+    name: Finalize ${{ matrix.group.name }}
+    needs: [plan, to-finalize]
+    if: always() && needs.to-finalize.outputs.groups != '[]' && needs.to-finalize.outputs.groups != ''
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        group: ${{ fromJSON(needs.plan.outputs.groups) }}
+        group: ${{ fromJSON(needs.to-finalize.outputs.groups) }}
     env:
       BRANCH: deps/${{ matrix.group.slug }}/${{ needs.plan.outputs.stamp }}
     steps:
