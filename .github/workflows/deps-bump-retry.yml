@@ -56,15 +56,6 @@ jobs:
     name: Fix
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    services:
-      postgres:
-        image: postgres
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: --health-cmd="pg_isready" --health-interval=10s --health-timeout=5s --health-retries=3
     env:
       BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/deps_primary
@@ -111,6 +102,11 @@ jobs:
         with:
           node-default: ${{ inputs.stack == 'npm' && '22' || '' }}
           npmrc-auth: ${{ secrets.NPMRC_AUTH }}
+
+      - name: Start Postgres
+        id: pg
+        if: steps.prev.outputs.state == 'fail' && inputs.stack == 'rails'
+        uses: fluence-eu/ci-workflows/actions/deps-postgres@v6
 
       - name: Prepare workspace
         if: steps.prev.outputs.state == 'fail'
@@ -180,6 +176,12 @@ jobs:
           name: deps-${{ fromJSON(inputs.group).slug }}-${{ inputs.stage }}-fixed
           path: ${{ runner.temp }}/deps/
           retention-days: 1
+
+      - name: Stop Postgres
+        if: always() && steps.pg.outputs.container
+        env:
+          CONTAINER: ${{ steps.pg.outputs.container }}
+        run: docker rm -f "$CONTAINER" >/dev/null
 
   push:
     name: Push and wait

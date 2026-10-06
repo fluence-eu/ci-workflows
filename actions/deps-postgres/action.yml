@@ -1,0 +1,33 @@
+name: Deps Postgres
+description: Start a throwaway Postgres reachable on localhost:5432 (user and password `postgres`), on GitHub-hosted runners and on self-hosted runners that run inside a container. Remove it with `docker rm -f` on the `container` output.
+
+outputs:
+  container:
+    description: Name of the Postgres container.
+    value: ${{ steps.start.outputs.container }}
+
+runs:
+  using: composite
+  steps:
+    - id: start
+      shell: bash
+      run: |
+        set -euo pipefail
+        if ! docker info >/dev/null 2>&1; then
+          echo "::error::Docker is not reachable from this runner (a containerized runner needs /var/run/docker.sock mounted)"
+          exit 1
+        fi
+        name="deps-pg-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RANDOM}"
+        # Job services cannot start from a runner that is itself a container:
+        # share its network namespace instead, so localhost:5432 stays valid.
+        runner_id=$(grep -oE '/docker/containers/[0-9a-f]{64}' /proc/self/mountinfo 2>/dev/null | head -n 1 | cut -d/ -f4 || true)
+        if [ -n "$runner_id" ]; then network=(--network "container:$runner_id"); else network=(-p 5432:5432); fi
+        docker run -d --rm --name "$name" "${network[@]}" -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres postgres >/dev/null
+        echo "container=$name" >> "$GITHUB_OUTPUT"
+        for _ in $(seq 1 30); do
+          docker exec "$name" pg_isready -U postgres -q && exit 0
+          sleep 2
+        done
+        echo "::error::Postgres did not become ready"
+        docker logs "$name" | tail -n 20
+        exit 1
