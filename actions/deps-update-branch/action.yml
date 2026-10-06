@@ -52,5 +52,5 @@ runs:
           echo "state=current" >> "$GITHUB_OUTPUT"
           exit 0
         fi
-        git bundle create "$dir/work.bundle" "$pr_head..HEAD"
+        git bundle create "$dir/work.bundle" "$pr_head..$(git symbolic-ref --short HEAD)"
         echo "state=updated" >> "$GITHUB_OUTPUT"
