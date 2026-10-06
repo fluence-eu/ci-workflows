@@ -357,6 +357,12 @@ jobs:
             2. Read the upgrade/migration guide of each gem between installed and
                target and apply every change this app needs (grep the usages).
                Run the gem's update generator when the guide requires one.
+               Then run what the bump affects (the bumped tool itself, e.g.
+               `bundle exec rubocop` for a linter, or a boot of the app) and fix
+               every deprecation or obsolete-config warning the bump introduces,
+               in the code or the tool's config (e.g. `.rubocop.yml`). New
+               offenses from new rules are listed in the PR body, not fixed en
+               masse.
                For a framework major, fix what the upgrade guide says breaks the
                app, but never run `bin/rails app:update`, touch `load_defaults` or
                add new_framework_defaults: that config upgrade is a developer's
