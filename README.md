@@ -128,7 +128,7 @@ vitest:
 
 deps:
   verification: ci           # rails-deps-bump: ci = iterate on the PR checks, none = draft PRs labelled deps:unverified
-  mergers: ''                # deps-merge: whitespace-separated GitHub logins allowed to `/merge` a deps PR; empty = nobody
+  mergers: []                # deps-merge: list of GitHub logins allowed to `/merge` a deps PR; empty = nobody
 
 release:
   gem_specs: my-gem-name     # REQUIRED by ruby-gem-{prepare-release,release}; multiline list for multi-gem

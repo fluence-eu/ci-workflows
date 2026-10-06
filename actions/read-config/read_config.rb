@@ -26,7 +26,7 @@ ENV.fetch("KEYS").each_line(chomp: true) do |line|
     missing << "#{key} (#{path})" if required.include?(key)
     values[key] = default.to_s
   else
-    values[key] = raw.to_s
+    values[key] = raw.is_a?(Array) ? raw.join("\n") : raw.to_s
   end
 end
 
