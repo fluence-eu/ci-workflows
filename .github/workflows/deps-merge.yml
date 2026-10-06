@@ -47,16 +47,34 @@ jobs:
           client-id: ${{ vars.FLUENCE_DEPS_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_DEPS_BOT_PRIVATE_KEY }}
 
-      - name: Merge when checks pass
+      - name: Read head commit
+        id: head
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           PR: ${{ github.event.issue.number }}
         run: |
-          set -euo pipefail
           sha=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)
-          pending=$(gh pr checks "$PR" --repo "$GITHUB_REPOSITORY" --json bucket --jq 'map(select(.bucket != "pass" and .bucket != "skipping")) | length')
-          if [ "$pending" != 0 ]; then
-            echo "::error::$pending check(s) not passing on #$PR"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for PR checks
+        id: wait
+        uses: fluence-eu/ci-workflows/actions/deps-wait-checks@v6
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+        with:
+          pr: ${{ github.event.issue.number }}
+          label: merge
+          base_branch: ${{ github.event.repository.default_branch }}
+
+      - name: Merge
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          PR: ${{ github.event.issue.number }}
+          STATE: ${{ steps.wait.outputs.state }}
+          SHA: ${{ steps.head.outputs.sha }}
+        run: |
+          if [ "$STATE" != pass ]; then
+            echo "::error::checks of #$PR ended in state $STATE"
             exit 1
           fi
-          gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --merge --match-head-commit "$sha"
+          gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --merge --admin --match-head-commit "$SHA"
