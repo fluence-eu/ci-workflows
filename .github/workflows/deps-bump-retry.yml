@@ -146,7 +146,8 @@ jobs:
 
             Fix only what the bump broke. A check already failing on the base
             branch, or a failure unrelated to the bumped gems, is not yours: do
-            not touch it. Commit each fix (`fix(deps): ...`).
+            not touch it. Commit each fix following CONTRIBUTING.md's commit
+            convention (Conventional Commits with the `deps` scope without one).
             Overwrite ${{ runner.temp }}/deps/analysis.md, in French: what failed,
             what you changed, what you deliberately left alone and why.
             The databases and their URLs are already set in the environment: run
