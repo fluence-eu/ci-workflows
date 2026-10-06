@@ -358,11 +358,17 @@ jobs:
                workspaces monorepo, bump the package in every workspace that
                declares it.
             4. Commit as you go, one commit per coherent change (bump,
-               code migration, schema), Conventional Commits:
-               `chore(deps): bump <gem> to <version>`, `fix(deps): adapt <what> to <gem> <version>`.
-            5. Write the PR body, in French, to ${{ runner.temp }}/deps/pr-body.md:
-               changelog summary per gem, breaking changes and how each was
-               handled, what remains risky, links to changelogs and guides.
+               code migration, schema).
+            5. Write the PR title (one line) to ${{ runner.temp }}/deps/pr-title.txt
+               and the PR body to ${{ runner.temp }}/deps/pr-body.md: breaking
+               changes and how each was handled, what remains risky, links to
+               changelogs and guides.
+
+            Read CONTRIBUTING.md (and any convention file it points to) first: its
+            commit, PR title and PR description rules (type for dependency changes,
+            description format, PR level and sections, language) override every
+            default here. Without one, use Conventional Commits with the `deps`
+            scope and a French PR body.
 
             The databases and their URLs are already set in the environment: run
             commands without `VAR=...` prefixes, they are refused.
@@ -386,7 +392,12 @@ jobs:
             echo "::error::Claude produced no commit for $BRANCH"
             exit 1
           fi
-          [ -s "$RUNNER_TEMP/deps/pr-body.md" ] || printf '%s\n\n_Body généré par défaut : Claude n’a pas écrit de description._\n' "$RATIONALE" > "$RUNNER_TEMP/deps/pr-body.md"
+          [ -s "$RUNNER_TEMP/deps/pr-body.md" ] || printf '%s\n' "$RATIONALE" > "$RUNNER_TEMP/deps/pr-body.md"
+          # Consumer CONTRIBUTING files forbid AI attribution; Claude adds it anyway.
+          FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --msg-filter 'sed -E "/^co-authored-by:/Id; /generated with .*claude/Id" | git stripspace' "$base..$BRANCH" >/dev/null
+          for f in pr-title.txt pr-body.md; do
+            if [ -f "$RUNNER_TEMP/deps/$f" ]; then sed -E "/^co-authored-by:/Id; /generated with .*claude/Id" "$RUNNER_TEMP/deps/$f" | git stripspace > "$RUNNER_TEMP/deps/$f.clean" && mv "$RUNNER_TEMP/deps/$f.clean" "$RUNNER_TEMP/deps/$f"; fi
+          done
           git bundle create "$RUNNER_TEMP/deps/work.bundle" "$base..$BRANCH"
 
       - uses: actions/upload-artifact@v7
@@ -450,9 +461,11 @@ jobs:
         if: steps.dl.outcome == 'success'
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
-          TITLE: 'chore(deps): ${{ matrix.group.name }}'
+          FALLBACK_TITLE: 'chore(deps): ${{ matrix.group.name }}'
         run: |
           set -euo pipefail
+          TITLE=$(head -n 1 "$RUNNER_TEMP/deps/pr-title.txt" 2>/dev/null || true)
+          TITLE=${TITLE:-$FALLBACK_TITLE}
           git fetch "$RUNNER_TEMP/deps/work.bundle" "${BRANCH}:${BRANCH}"
           git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${BRANCH}:refs/heads/${BRANCH}"
           draft=()

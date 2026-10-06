@@ -146,7 +146,8 @@ jobs:
 
             Fix only what the bump broke. A check already failing on the base
             branch, or a failure unrelated to the bumped gems, is not yours: do
-            not touch it. Commit each fix (`fix(deps): ...`).
+            not touch it. Commit each fix following CONTRIBUTING.md's commit
+            convention (Conventional Commits with the `deps` scope without one).
             Overwrite ${{ runner.temp }}/deps/analysis.md, in French: what failed,
             what you changed, what you deliberately left alone and why.
             The databases and their URLs are already set in the environment: run
@@ -169,6 +170,8 @@ jobs:
             echo "::warning::Claude produced no fix for $BRANCH"
             exit 0
           fi
+          # Consumer CONTRIBUTING files forbid AI attribution; Claude adds it anyway.
+          FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --msg-filter 'sed -E "/^co-authored-by:/Id; /generated with .*claude/Id" | git stripspace' "$base..$BRANCH" >/dev/null
           git bundle create "$RUNNER_TEMP/deps/work.bundle" "$base..$BRANCH"
 
       - uses: actions/upload-artifact@v7
