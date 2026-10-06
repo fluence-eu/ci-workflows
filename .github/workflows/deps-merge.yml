@@ -1,0 +1,62 @@
+name: Deps Merge
+
+on:
+  workflow_call:
+    secrets:
+      FLUENCE_DEPS_BOT_PRIVATE_KEY:
+        description: Private key of the fluence-deps App, which merges the PR under its ruleset bypass.
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  merge:
+    name: Merge
+    if: github.event.issue.pull_request && github.event.issue.user.login == 'fluence-deps[bot]' && github.event.comment.body == '/merge'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Read .fluence-ci.yml
+        id: cfg
+        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        with:
+          keys: |
+            mergers=deps.mergers
+
+      - name: Authorize commenter
+        env:
+          MERGERS: ${{ fromJSON(steps.cfg.outputs.values).mergers }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+        run: |
+          for login in $MERGERS; do
+            if [ "$login" = "$COMMENTER" ]; then exit 0; fi
+          done
+          echo "::error::$COMMENTER is not listed in .fluence-ci.yml deps.mergers"
+          exit 1
+
+      - name: Generate fluence-deps token
+        id: token
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
+        with:
+          client-id: ${{ vars.FLUENCE_DEPS_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.FLUENCE_DEPS_BOT_PRIVATE_KEY }}
+
+      - name: Merge when checks pass
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          PR: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          sha=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)
+          pending=$(gh pr checks "$PR" --repo "$GITHUB_REPOSITORY" --json bucket --jq 'map(select(.bucket != "pass" and .bucket != "skipping")) | length')
+          if [ "$pending" != 0 ]; then
+            echo "::error::$pending check(s) not passing on #$PR"
+            exit 1
+          fi
+          gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --merge --match-head-commit "$sha"
