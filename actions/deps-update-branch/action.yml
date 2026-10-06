@@ -8,7 +8,7 @@ inputs:
 
 outputs:
   state:
-    description: '`updated` (bundle ready to push) or `manual` (conflict needing a human).'
+    description: '`updated` (bundle ready to push), `current` (already up to date) or `manual` (conflict needing a human).'
     value: ${{ steps.update.outputs.state }}
 
 runs:
@@ -23,7 +23,9 @@ runs:
         dir="$RUNNER_TEMP/deps"
         mkdir -p "$dir"
         versions="${GITHUB_ACTION_PATH}/deps_lock_versions.rb"
-        git fetch -q origin "$BASE_BRANCH"
+        # The caller checks out with fetch-depth 0 and no credentials: the base
+        # branch is already there, and a fetch would fail on a private repo.
+        git rev-parse -q --verify "origin/$BASE_BRANCH" >/dev/null || git fetch -q origin "$BASE_BRANCH"
         pr_head=$(git rev-parse HEAD)
         merge_base=$(git merge-base HEAD "origin/$BASE_BRANCH")
         echo "$pr_head" > "$dir/base_sha"
@@ -45,6 +47,10 @@ runs:
           done
           git add $conflicted
           git commit -q --no-edit
+        fi
+        if [ "$(git rev-parse HEAD)" = "$pr_head" ]; then
+          echo "state=current" >> "$GITHUB_OUTPUT"
+          exit 0
         fi
         git bundle create "$dir/work.bundle" "$pr_head..HEAD"
         echo "state=updated" >> "$GITHUB_OUTPUT"

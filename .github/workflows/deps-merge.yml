@@ -52,7 +52,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.issue.number }}
         run: |
-          for _ in $(seq 1 12); do
+          for _ in $(seq 1 24); do
             pr=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json headRefName,headRefOid,mergeable)
             [ "$(jq -r .mergeable <<<"$pr")" != UNKNOWN ] && break
             sleep 5
@@ -60,13 +60,16 @@ jobs:
           echo "branch=$(jq -r .headRefName <<<"$pr")" >> "$GITHUB_OUTPUT"
           echo "sha=$(jq -r .headRefOid <<<"$pr")" >> "$GITHUB_OUTPUT"
           echo "mergeable=$(jq -r .mergeable <<<"$pr")" >> "$GITHUB_OUTPUT"
+          echo "#$PR mergeable: $(jq -r .mergeable <<<"$pr")"
 
   # Regenerating a lockfile evaluates the branch's Gemfile, so no write token
-  # lives here: the merge job pushes the result.
+  # lives here: the merge job pushes the result. Also runs on UNKNOWN: on
+  # vision-back #2828/#2835 the conflict was not reported in time and the
+  # merge failed on it.
   update:
     name: Update branch
     needs: authorize
-    if: needs.authorize.outputs.mergeable == 'CONFLICTING'
+    if: needs.authorize.outputs.mergeable != 'MERGEABLE'
     runs-on: ubuntu-latest
     permissions:
       contents: read
