@@ -63,7 +63,7 @@ The review is incremental across runs. The first run is exhaustive (every findin
 Minimal consumer:
 
 ```yaml
-name: Claude review
+name: Claude — PR Review
 
 on:
   pull_request:
@@ -77,7 +77,13 @@ jobs:
     uses: fluence-eu/ci-workflows/.github/workflows/claude-review-pr.yml@v6
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-      FLUENCE_RELEASE_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}  # optional — skips release PRs
+      FLUENCE_RELEASE_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
 ```
 
 ### Deps bump (Claude)
