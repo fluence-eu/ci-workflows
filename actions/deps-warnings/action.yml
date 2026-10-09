@@ -28,7 +28,7 @@ runs:
         while IFS= read -r cmd; do
           [ -z "${cmd//[[:space:]]/}" ] && continue
           echo "::group::$cmd"
-          bash -c "$cmd" 2>&1 >/dev/null | sed -e "s#$PWD#.#g" | grep -v '^[[:space:]]*$' | tee -a "$FILE"
+          { bash -c "$cmd" 2>&1 >/dev/null || true; } | sed -e "s#$PWD#.#g" -e '/^[[:space:]]*$/d' | tee -a "$FILE"
           echo "::endgroup::"
         done <<< "$COMMANDS"
         sort -u -o "$FILE" "$FILE"
