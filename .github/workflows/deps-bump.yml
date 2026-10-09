@@ -335,7 +335,7 @@ jobs:
           {
             echo 'commands<<__SMOKE__'
             case "$STACK" in
-              rails|ruby-gem) [ -f .rubocop.yml ] && echo 'bundle exec rubocop --format quiet Gemfile' ;;
+              rails|ruby-gem) [ -f .rubocop.yml ] && bundle info rubocop >/dev/null 2>&1 && echo 'bundle exec rubocop --format quiet Gemfile' ;;
             esac
             printf '%s\n' "$EXTRA"
             echo '__SMOKE__'
