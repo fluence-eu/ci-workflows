@@ -48,10 +48,16 @@ jobs:
       - id: check
         env:
           AUTHOR: ${{ github.event.pull_request.user.login }}
+          ACTOR: ${{ github.actor }}
           SLUG: ${{ steps.token.outputs.app-slug }}
           HEAD_REF: ${{ github.head_ref }}
         run: |
-          if [ -n "$SLUG" ] && [ "$AUTHOR" = "${SLUG}[bot]" ] && [[ "$HEAD_REF" == release/v* ]]; then
+          # Dependabot runs get empty Actions secrets: without the skip, every
+          # dependency bump would show a red review check.
+          if [ "$ACTOR" = "dependabot[bot]" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Dependabot PR — skipping Claude review."
+          elif [ -n "$SLUG" ] && [ "$AUTHOR" = "${SLUG}[bot]" ] && [[ "$HEAD_REF" == release/v* ]]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "::notice::Release PR detected — skipping Claude review."
           else
@@ -102,4 +108,4 @@ jobs:
           prompt: /review:pr ${{ github.event.pull_request.number }} --mode ci
           claude_args: |
             --max-turns 60
-            --allowedTools "Agent,Read,Grep,Glob,Bash(git diff:*),Bash(git show:*),Bash(git log:*),Bash(git merge-base:*),Bash(git rev-parse:*),Bash(git fetch:*),Bash(gh pr view:*),Bash(gh api:*)"
+            --allowedTools "Agent,Read,Grep,Glob,Bash(git diff:*),Bash(git show:*),Bash(git log:*),Bash(git grep:*),Bash(git merge-base:*),Bash(git rev-parse:*),Bash(git fetch:*),Bash(gh pr view:*),Bash(gh api:*)"
