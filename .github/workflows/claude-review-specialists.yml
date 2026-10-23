@@ -108,4 +108,4 @@ jobs:
           prompt: /review:pr ${{ github.event.pull_request.number }} --mode ci
           claude_args: |
             --max-turns 60
-            --allowedTools "Agent,Read,Grep,Glob,Bash(git diff:*),Bash(git show:*),Bash(git log:*),Bash(git grep:*),Bash(git merge-base:*),Bash(git rev-parse:*),Bash(git fetch:*),Bash(gh pr view:*),Bash(gh api:*)"
+            --allowedTools "Agent,Read,Grep,Glob,Bash(git diff:*),Bash(git show:*),Bash(git log:*),Bash(git merge-base:*),Bash(git rev-parse:*),Bash(gh pr view:*),Bash(gh api:*)"
