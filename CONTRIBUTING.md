@@ -58,10 +58,10 @@ Never use `secrets: inherit` in the reusable declaration. Consumers forward only
 
 | Secret | Required by |
 |---|---|
-| `FLUENCE_RELEASE_BOT_PRIVATE_KEY` | `ruby-gem-prepare-release.yml`, `app-prepare-release.yml`, `app-release.yml` |
+| `FLUENCE_RELEASE_BOT_PRIVATE_KEY` | `ruby-gem-prepare-release.yml`, `app-prepare-release.yml`, `app-release.yml`, `claude-review-specialists.yml` |
 | `FLUENCE_CI_BOT_PRIVATE_KEY` | `ruby-gem-docs-pr.yml`, `ruby-gem-coverage-pr.yml`, `ruby-gem-rubocop-pr.yml` |
 | `FLUENCE_DEPS_BOT_PRIVATE_KEY` | `rails-deps-bump.yml`, `ruby-gem-deps-bump.yml`, `vue-app-deps-bump.yml`, `npm-deps-bump.yml`, `deps-merge.yml` |
-| `CLAUDE_CODE_OAUTH_TOKEN` | `claude-review-pr.yml`, `rails-deps-bump.yml`, `ruby-gem-deps-bump.yml`, `vue-app-deps-bump.yml`, `npm-deps-bump.yml` |
+| `CLAUDE_CODE_OAUTH_TOKEN` | `claude-review-pr.yml`, `claude-review-specialists.yml`, `rails-deps-bump.yml`, `ruby-gem-deps-bump.yml`, `vue-app-deps-bump.yml`, `npm-deps-bump.yml` |
 
 Add a `secrets:` block to your reusable only for secrets you actually consume, and document what they do. `GITHUB_TOKEN` is auto-provided — don't declare it.
 

@@ -59,6 +59,7 @@ The review is incremental across runs. The first run is exhaustive (every findin
 | Central workflow | Consumer file | Trigger | Mode | Role |
 |---|---|---|---|---|
 | `claude-review-pr.yml` | `claude-review-pr.yml` | `pull_request` | advisory | Sticky summary + inline review comments via `anthropics/claude-code-action@v1`. Never fails the PR — Claude is one reviewer among others, not a gate. |
+| `claude-review-specialists.yml` | `claude-review.yml` | `pull_request` | advisory | Runs `/review:pr --mode ci` from the `review@fluence` plugin ([claude-config](https://github.com/fluence-eu/claude-config)): correctness and security reviewers in parallel, an independent verifier, one GitHub review (COMMENT). The full set of reviewers runs locally before the PR. A failed run shows red instead of being masked. Requires `FLUENCE_RELEASE_BOT_PRIVATE_KEY` (read token on claude-config) and `style@fluence` + `review@fluence` enabled in the consumer's `.claude/settings.json`. |
 
 Minimal consumer:
 
