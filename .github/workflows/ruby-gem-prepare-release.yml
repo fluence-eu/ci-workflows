@@ -21,13 +21,20 @@ name: Ruby Gem — Prepare Release PR
 #     gem_specs: |
 #       fluence-foo
 #       fluence-weirdo:lib/non/standard/v.rb
+#
+# Dated releases with a hand-written changelog, as on the app-* family:
+#
+#   release:
+#     version: date       # UTC stamp in `release.tag_format`, `bump` unused
+#     changelog: manual   # date the `## [Unreleased]` section, no git-cliff
 
 on:
   workflow_call:
     inputs:
       bump:
-        description: "Version bump type (patch|minor|major)"
-        required: true
+        description: "Version bump type (patch|minor|major). Unused when `release.version` is `date`."
+        required: false
+        default: ''
         type: string
     secrets:
       FLUENCE_RELEASE_BOT_PRIVATE_KEY:
@@ -66,6 +73,9 @@ jobs:
         with:
           keys: |
             gem_specs=release.gem_specs=
+            version_scheme=release.version=semver
+            changelog=release.changelog=git-cliff
+            tag_format=release.tag_format=%Y.%m.%d.%H%M%S
           required: gem_specs
 
       - uses: fluence-eu/ci-workflows/actions/setup-release-bot-git@v6
@@ -83,13 +93,35 @@ jobs:
         with:
           ruby-version: ${{ steps.ruby.outputs.version }}
 
+      - name: Resolve release options
+        id: options
+        env:
+          VERSION_SCHEME: ${{ fromJSON(steps.cfg.outputs.values).version_scheme }}
+          CHANGELOG: ${{ fromJSON(steps.cfg.outputs.values).changelog }}
+          TAG_FORMAT: ${{ fromJSON(steps.cfg.outputs.values).tag_format }}
+        run: |
+          set -euo pipefail
+          NOW=$(date -u +%s)
+          case "$VERSION_SCHEME" in
+            semver) ;;
+            date) echo "version=$(date -u -d "@$NOW" +"$TAG_FORMAT")" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::Invalid release.version '$VERSION_SCHEME'. Use semver or date." ; exit 1 ;;
+          esac
+          case "$CHANGELOG" in
+            git-cliff|manual) ;;
+            *) echo "::error::Invalid release.changelog '$CHANGELOG'. Use git-cliff or manual." ; exit 1 ;;
+          esac
+          echo "date=$(date -u -d "@$NOW" +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
       - id: bump
         uses: fluence-eu/ci-workflows/actions/bump-ruby-gem-versions@v6
         with:
           bump: ${{ inputs.bump }}
+          version: ${{ steps.options.outputs.version }}
           gem-specs: ${{ fromJSON(steps.cfg.outputs.values).gem_specs }}
 
       - name: Generate changelog
+        if: fromJSON(steps.cfg.outputs.values).changelog == 'git-cliff'
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
@@ -97,6 +129,22 @@ jobs:
         env:
           OUTPUT: CHANGELOG.md
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Date the Unreleased changelog section
+        if: fromJSON(steps.cfg.outputs.values).changelog == 'manual'
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+          RELEASE_DATE: ${{ steps.options.outputs.date }}
+        run: |
+          ruby -e '
+            fail_with = ->(message) { puts "::error::#{message}"; exit 1 }
+            fail_with.("CHANGELOG.md not found") unless File.exist?("CHANGELOG.md")
+            text = File.read("CHANGELOG.md")
+            section = text[/^## \[Unreleased\][^\n]*(?:\n|\z)(.*?)(?=^## \[|\z)/m, 1]
+            fail_with.("CHANGELOG.md has no ## [Unreleased] section") unless section
+            fail_with.("The ## [Unreleased] section of CHANGELOG.md is empty") if section.strip.empty?
+            File.write("CHANGELOG.md", text.sub(/^## \[Unreleased\][^\n]*/, "## [#{ENV["VERSION"]}] - #{ENV["RELEASE_DATE"]}"))
+          '
 
       - uses: fluence-eu/ci-workflows/actions/commit-release-branch@v6
         with:
