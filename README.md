@@ -23,7 +23,7 @@ For contributor guidelines and design principles, see [CONTRIBUTING.md](./CONTRI
 
 | Central workflow | Consumer file | Trigger | Role |
 |---|---|---|---|
-| `ruby-gem-prepare-release.yml` | `prepare-release.yml` | `workflow_dispatch` | Bump version (mono or multi-gem via `gem_specs`), regenerate `CHANGELOG.md`, open + auto-merge release PR |
+| `ruby-gem-prepare-release.yml` | `prepare-release.yml` | `workflow_dispatch` | Bump version (mono or multi-gem via `gem_specs`, semver or dated), regenerate `CHANGELOG.md` or date its `[Unreleased]` section, open + auto-merge release PR |
 | `ruby-gem-release.yml` | `release.yml` | `push` on the version file | Verify bot author, tag, GitHub Release, build & attach the `.gem` asset(s) |
 | `ruby-gem-publish.yml` | `publish.yml` | `release: published` (+ consumer-side `workflow_dispatch`) | Download every `.gem` asset from the release and push them to GitHub Packages |
 | `app-prepare-release.yml` | `prepare-release.yml` | `workflow_dispatch` | Generate timestamp tag, run git-cliff, open + auto-merge release PR |
@@ -139,6 +139,8 @@ deps:
 
 release:
   gem_specs: my-gem-name     # REQUIRED by ruby-gem-{prepare-release,release}; multiline list for multi-gem
+  version: semver            # ruby-gem-prepare-release: semver = the dispatched bump, date = UTC stamp in tag_format
+  changelog: git-cliff       # ruby-gem-prepare-release: git-cliff = regenerate, manual = date the `## [Unreleased]` section
   package_paths: package.json  # npm-*; multiline list for multi-package monorepos
   cross_pin_dependency: ''   # npm-prepare-release
   build_command: npm run build --workspaces  # npm-release
@@ -148,7 +150,7 @@ release:
   scope: ''                  # npm-publish; empty = @<repo-owner>
   develop_branch: develop    # app-*
   main_branch: main          # app-release
-  tag_format: '%Y.%m.%d.%H%M%S'  # app-prepare-release
+  tag_format: '%Y.%m.%d.%H%M%S'  # app-prepare-release, ruby-gem-prepare-release (version: date)
 ```
 
 The `actions/read-config` composite action resolves these keys inside each reusable, right after the consumer checkout. A missing required key fails the run with an explicit `::error::` naming the key.
@@ -169,7 +171,9 @@ Use `@main` only for active central-workflow development.
 Operator dispatches "Prepare Release PR"
   └── ruby-gem-prepare-release.yml
         ├── Bump VERSION constant across each gem in `release.gem_specs`
+        │     (or write the UTC date stamp with `release.version: date`)
         ├── git-cliff --tag vX.Y.Z (refresh CHANGELOG.md)
+        │     (or date the `## [Unreleased]` section with `release.changelog: manual`)
         └── Create release/vX.Y.Z PR on main, auto-merge (squash)
 
 Auto-merge lands "release: vX.Y.Z" commit on main, touching version.rb
@@ -333,6 +337,35 @@ jobs:
 ```
 
 The release workflow reads the version via `Gem::Specification.load('<gem>.gemspec').version` — same source of truth `gem build` uses. Only `release.gem_specs` is required; the version file path is auto-derived via the Bundler default convention (`lib/<gem with - as />/version.rb`). For non-standard layouts, override per gem with `gem_specs: my-gem:lib/non/standard/v.rb`. For multi-gem repos, use a multiline list — all gems are released as a tightly-coupled set under one tag, and `publish.yml` pushes every `.gem` asset attached to the release.
+
+For dated releases with a hand-written changelog, set both keys and drop the `bump` choice from the prepare wrapper:
+
+```yaml
+# .fluence-ci.yml
+release:
+  gem_specs: my-gem-name
+  version: date
+  changelog: manual
+```
+
+```yaml
+# .github/workflows/prepare-release.yml
+name: Prepare Release PR
+
+on:
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-prepare-release.yml@v6
+    secrets:
+      FLUENCE_RELEASE_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
+    permissions:
+      contents: read
+      packages: read
+```
+
+Write the release notes under `## [Unreleased]` in `CHANGELOG.md` before dispatching. The run fails when that section is missing or empty, and renames it to `## [<version>] - <date>`, which `ruby-gem-release.yml` publishes as the release notes.
 
 ### Rolling-release app
 
