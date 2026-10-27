@@ -1,7 +1,8 @@
 name: Bump Ruby gem versions
 description: |
   Computes the next version (patch|minor|major) from the current shared
-  version of one or more gems, then writes it back to each `version.rb`.
+  version of one or more gems, or takes the one given in `version`, then
+  writes it back to each `version.rb`.
   The read-and-verify-sync step is delegated to the
   `read-and-verify-ruby-gem-versions` composite so that the same logic
   serves both prepare-release (this composite, with a write) and
@@ -17,18 +18,23 @@ description: |
 
 inputs:
   bump:
-    description: "Version bump type (patch|minor|major)"
-    required: true
+    description: "Version bump type (patch|minor|major). Ignored when `version` is set."
+    required: false
+    default: ''
+  version:
+    description: "New version written as is (no v prefix), instead of one computed from `bump`."
+    required: false
+    default: ''
   gem-specs:
     description: 'Newline-separated list of gem names (without .gemspec). Optional ":path/to/version.rb" override per line.'
     required: true
 
 outputs:
   version:
-    description: "The new version (semver, no v prefix)."
+    description: "The new version (no v prefix)."
     value: ${{ steps.write.outputs.version }}
   tag:
-    description: "The new tag (v-prefixed semver)."
+    description: "The new tag (v-prefixed version)."
     value: ${{ steps.write.outputs.tag }}
   version_files:
     description: "Newline-separated list of version.rb paths actually written to. Useful to git-add downstream without re-deriving from gem-specs."
@@ -46,20 +52,23 @@ runs:
       shell: bash
       env:
         BUMP: ${{ inputs.bump }}
+        NEW_VERSION: ${{ inputs.version }}
         GEM_SPECS: ${{ inputs.gem-specs }}
         CURRENT: ${{ steps.read.outputs.version }}
       run: |
         set -euo pipefail
 
-        # Compute the new version from the shared current.
-        IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
-        case "$BUMP" in
-          patch) PATCH=$((PATCH + 1)) ;;
-          minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
-          major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-          *) echo "::error::Invalid bump type '$BUMP'. Use patch, minor, or major." ; exit 1 ;;
-        esac
-        NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+        # Compute the new version from the shared current, unless given.
+        if [ -z "$NEW_VERSION" ]; then
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          case "$BUMP" in
+            patch) PATCH=$((PATCH + 1)) ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            *) echo "::error::Invalid bump type '$BUMP'. Use patch, minor, or major." ; exit 1 ;;
+          esac
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+        fi
         echo "Bumping from ${CURRENT} → ${NEW_VERSION}"
 
         # Derive each version file from the gem-specs entry (`:override`
