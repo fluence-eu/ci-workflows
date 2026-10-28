@@ -44,7 +44,7 @@ jobs:
       skip_release_pr: ${{ steps.check.outputs.skip }}
     steps:
       - id: token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v7
         with:
           client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -70,7 +70,7 @@ jobs:
     name: Measure
     needs: resolve-bot
     if: needs.resolve-bot.outputs.skip_release_pr == 'false'
-    uses: fluence-eu/ci-workflows/.github/workflows/rails-security-measure.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/rails-security-measure.yml@v7
 
   comment:
     name: Comment on PR
@@ -95,7 +95,7 @@ jobs:
 
       - name: Find latest base-branch run with security report
         id: base-run
-        uses: fluence-eu/ci-workflows/actions/find-base-run@v6
+        uses: fluence-eu/ci-workflows/actions/find-base-run@v7
         with:
           workflow_file: ${{ inputs.measure_workflow_file }}
 
@@ -124,7 +124,7 @@ jobs:
 
       - name: Resolve Ruby version
         id: ruby
-        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v7
         with:
           runtime: ruby
 
@@ -141,7 +141,7 @@ jobs:
           bundler-cache: true
 
       - id: body
-        uses: fluence-eu/ci-workflows/actions/security-report@v6
+        uses: fluence-eu/ci-workflows/actions/security-report@v7
         with:
           brakeman_path:        security-pr/brakeman.json
           audit_path:           security-pr/audit.txt
@@ -150,7 +150,7 @@ jobs:
           base_audit_path:      ${{ steps.base.outputs.audit }}
           base_ruby_audit_path: ${{ steps.base.outputs.ruby_audit }}
 
-      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v6
+      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v7
         with:
           marker:          '<!-- security-report -->'
           body:            ${{ steps.body.outputs.body }}

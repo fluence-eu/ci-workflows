@@ -75,7 +75,7 @@ permissions:
 
 jobs:
   review:
-    uses: fluence-eu/ci-workflows/.github/workflows/claude-review-pr.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/claude-review-pr.yml@v7
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       FLUENCE_RELEASE_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -158,9 +158,9 @@ The `actions/read-config` composite action resolves these keys inside each reusa
 
 ---
 
-## Pinning: `@v6`
+## Pinning: `@v7`
 
-All workflow references pin to the current major (`@v6` as of writing — `v1` through `v5` are frozen at their last commits). The active major tag is kept mobile: it points at the latest backward-compatible commit of `main`. Bug fixes are picked up by consumers automatically on the next run. Breaking changes (removed input, new required secret, changed semantics) cut a new major (next would be `@v7`); see [CONTRIBUTING.md](./CONTRIBUTING.md#versioning) for the rules.
+All workflow references pin to the current major (`@v7` as of writing — `v1` through `v6` are frozen at their last commits). The active major tag is kept mobile: it points at the latest backward-compatible commit of `main`. Bug fixes are picked up by consumers automatically on the next run. Breaking changes (removed input, new required secret, changed semantics) cut a new major (next would be `@v8`); see [CONTRIBUTING.md](./CONTRIBUTING.md#versioning) for the rules.
 
 Use `@main` only for active central-workflow development.
 
@@ -240,7 +240,7 @@ Pull request
   └── ruby-gem-rubocop-pr.yml       — re-measure PR head + offenses diff + sticky comment
 ```
 
-Helper scripts (`coverage_report.rb`, `yardstick_report.rb`, `rubocop_report.rb`) are wrapped as **composite actions** under `actions/{name}-report/`. The PR workflows call them via `uses: fluence-eu/ci-workflows/actions/{name}-report@v6` — no sidecar checkout, no additional GitHub App.
+Helper scripts (`coverage_report.rb`, `yardstick_report.rb`, `rubocop_report.rb`) are wrapped as **composite actions** under `actions/{name}-report/`. The PR workflows call them via `uses: fluence-eu/ci-workflows/actions/{name}-report@v7` — no sidecar checkout, no additional GitHub App.
 
 ---
 
@@ -273,7 +273,7 @@ on:
 
 jobs:
   prepare:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-prepare-release.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-prepare-release.yml@v7
     with:
       bump: ${{ inputs.bump }}
     secrets:
@@ -299,7 +299,7 @@ on:
 
 jobs:
   release:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-release.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-release.yml@v7
     secrets:
       # Forwarded so `gh release create` runs with the App's installation
       # token. App-issued release events trigger downstream `publish.yml` —
@@ -327,7 +327,7 @@ on:
 
 jobs:
   publish:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-publish.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-publish.yml@v7
     with:
       # Empty for `release: published` (the reusable falls back to the
       # event payload), populated for `workflow_dispatch`.
@@ -358,7 +358,7 @@ on:
 
 jobs:
   prepare:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-prepare-release.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-prepare-release.yml@v7
     secrets:
       FLUENCE_RELEASE_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
     permissions:
@@ -381,7 +381,7 @@ on:
 
 jobs:
   prepare:
-    uses: fluence-eu/ci-workflows/.github/workflows/app-prepare-release.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/app-prepare-release.yml@v7
     secrets:
       FLUENCE_RELEASE_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
     permissions:
@@ -403,7 +403,7 @@ on:
 
 jobs:
   release:
-    uses: fluence-eu/ci-workflows/.github/workflows/app-release.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/app-release.yml@v7
     secrets:
       FLUENCE_RELEASE_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
     permissions:
@@ -431,7 +431,7 @@ on:
   workflow_dispatch:
 jobs:
   docs:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-deploy.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-deploy.yml@v7
     permissions:
       contents: read
       pages: write
@@ -446,7 +446,7 @@ on:
     branches: [main]
 jobs:
   measure:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-measure.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-measure.yml@v7
     permissions:
       contents: read
       packages: read
@@ -459,7 +459,7 @@ on:
   pull_request:
 jobs:
   docs:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-pr.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-pr.yml@v7
     secrets:
       FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
       FLUENCE_RELEASE_BOT_PRIVATE_KEY:    ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -480,7 +480,7 @@ on:
     branches: [main]
 jobs:
   measure:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-measure.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-measure.yml@v7
     permissions:
       contents: read
       packages: read
@@ -493,7 +493,7 @@ on:
   pull_request:
 jobs:
   coverage:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-pr.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-pr.yml@v7
     secrets:
       FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
       FLUENCE_RELEASE_BOT_PRIVATE_KEY:    ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -514,7 +514,7 @@ on:
     branches: [main]
 jobs:
   measure:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-rubocop-measure.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-rubocop-measure.yml@v7
     permissions:
       contents: read
       packages: read
@@ -527,7 +527,7 @@ on:
   pull_request:
 jobs:
   rubocop:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-rubocop-pr.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-rubocop-pr.yml@v7
     secrets:
       FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
       FLUENCE_RELEASE_BOT_PRIVATE_KEY:    ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -550,7 +550,7 @@ on:
     branches: [main]
 jobs:
   measure:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-measure.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-measure.yml@v7
     permissions:
       contents: read
       packages: read
@@ -563,7 +563,7 @@ on:
   pull_request:
 jobs:
   codequality:
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-pr.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-codequality-pr.yml@v7
     secrets:
       FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
       FLUENCE_RELEASE_BOT_PRIVATE_KEY:    ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -584,7 +584,7 @@ on:
     branches: [main]
 jobs:
   measure:
-    uses: fluence-eu/ci-workflows/.github/workflows/rails-security-measure.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/rails-security-measure.yml@v7
     permissions:
       contents: read
       packages: read
@@ -597,7 +597,7 @@ on:
   pull_request:
 jobs:
   security:
-    uses: fluence-eu/ci-workflows/.github/workflows/rails-security-pr.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/rails-security-pr.yml@v7
     secrets:
       FLUENCE_CI_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_CI_BOT_PRIVATE_KEY }}
       FLUENCE_RELEASE_BOT_PRIVATE_KEY:    ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -636,7 +636,7 @@ on:
 
 jobs:
   deps:
-    uses: fluence-eu/ci-workflows/.github/workflows/rails-deps-bump.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/rails-deps-bump.yml@v7
     with:
       scope: ${{ inputs.scope }}
       allow_major: ${{ inputs.allow_major }}
@@ -667,7 +667,7 @@ on:
 
 jobs:
   merge:
-    uses: fluence-eu/ci-workflows/.github/workflows/deps-merge.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/deps-merge.yml@v7
     secrets:
       FLUENCE_DEPS_BOT_PRIVATE_KEY: ${{ secrets.FLUENCE_DEPS_BOT_PRIVATE_KEY }}
     permissions:
