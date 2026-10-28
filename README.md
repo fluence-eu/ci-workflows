@@ -26,6 +26,7 @@ For contributor guidelines and design principles, see [CONTRIBUTING.md](./CONTRI
 | `ruby-gem-prepare-release.yml` | `prepare-release.yml` | `workflow_dispatch` | Bump version (mono or multi-gem via `gem_specs`, semver or dated), regenerate `CHANGELOG.md` or date its `[Unreleased]` section, open + auto-merge release PR |
 | `ruby-gem-release.yml` | `release.yml` | `push` on the version file | Verify bot author, tag, GitHub Release, build & attach the `.gem` asset(s) |
 | `ruby-gem-publish.yml` | `publish.yml` | `release: published` (+ consumer-side `workflow_dispatch`) | Download every `.gem` asset from the release and push them to GitHub Packages |
+| `ruby-gem-publish-rubygems.yml` | `publish-rubygems.yml` | `release: published` (+ consumer-side `workflow_dispatch`) | Push the same `.gem` assets to rubygems.org through trusted publishing — public gems only |
 | `app-prepare-release.yml` | `prepare-release.yml` | `workflow_dispatch` | Generate timestamp tag, run git-cliff, open + auto-merge release PR |
 | `app-release.yml` | `release.yml` | `push` on the working branch + `paths: CHANGELOG.md` | Verify bot author, create tag + GitHub Release, force-push working→released branch |
 | `npm-prepare-release.yml` | `prepare-release.yml` | `workflow_dispatch` | Bump version in one or more `package.json`, refresh `package-lock.json`, open + auto-merge release PR. Optional `cross_pin_dependency` for tightly-coupled monorepo siblings. |
@@ -185,7 +186,8 @@ Auto-merge lands "release: vX.Y.Z" commit on main, touching version.rb
         └── Build + attach each gem-name-*.gem asset
 
 GitHub Release is published (automatic signal from the above)
-  └── ruby-gem-publish.yml — downloads every .gem asset, pushes them to GitHub Packages
+  ├── ruby-gem-publish.yml — downloads every .gem asset, pushes them to GitHub Packages
+  └── ruby-gem-publish-rubygems.yml — same assets to rubygems.org (public gems only)
 ```
 
 Publishing is decoupled from building: the `.gem` shipped to the registry is literally the file attached to the GitHub Release, so the two sources of truth can't drift. Re-publishing is as simple as re-publishing the GitHub Release, or dispatching the consumer's `publish.yml` wrapper with a `tag`.
@@ -335,6 +337,33 @@ jobs:
     permissions:
       contents: read
       packages: write
+```
+
+A public gem also published to rubygems.org adds a second wrapper, granting `id-token: write` for trusted publishing. Its rubygems.org trusted publisher names the consumer repo, the workflow `ruby-gem-publish-rubygems.yml` and the workflow repository `fluence-eu/ci-workflows`. Before the first release the gem doesn't exist yet, so this is a *pending* publisher created from your rubygems.org profile; it is only valid for about 12 hours, so create it right before releasing. The gemspec must not set `allowed_push_host`, which restricts `gem push` to a single registry.
+
+```yaml
+# .github/workflows/publish-rubygems.yml
+name: Publish Gem to RubyGems.org
+
+on:
+  release:
+    types: [published]
+  # Manual fallback for republishing a tag.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to publish (e.g. v0.10.0). Must already have a GitHub Release with the gem asset(s) attached.
+        required: true
+        type: string
+
+jobs:
+  publish:
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-publish-rubygems.yml@v7
+    with:
+      tag: ${{ inputs.tag }}
+    permissions:
+      contents: read
+      id-token: write
 ```
 
 The release workflow reads the version via `Gem::Specification.load('<gem>.gemspec').version` — same source of truth `gem build` uses. Only `release.gem_specs` is required; the version file path is auto-derived via the Bundler default convention (`lib/<gem with - as />/version.rb`). For non-standard layouts, override per gem with `gem_specs: my-gem:lib/non/standard/v.rb`. For multi-gem repos, use a multiline list — all gems are released as a tightly-coupled set under one tag, and `publish.yml` pushes every `.gem` asset attached to the release.
@@ -758,7 +787,7 @@ If a release tag already exists with the `.gem` attached but the package push st
 gh workflow run publish.yml -f tag=v0.12.0   # on the consumer repo
 ```
 
-The workflow downloads every `.gem` asset from that release and pushes them.
+The workflow downloads every `.gem` asset from that release and pushes them. The rubygems.org push is dispatched the same way through `publish-rubygems.yml`; rubygems.org refuses to overwrite a version that is already published.
 
 ## Monorepo note
 
