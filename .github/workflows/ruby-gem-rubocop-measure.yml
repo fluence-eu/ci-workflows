@@ -38,7 +38,7 @@ jobs:
 
       - name: Resolve Ruby version
         id: ruby
-        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v7
         with:
           runtime: ruby
 
@@ -46,7 +46,7 @@ jobs:
         env:
           # Authenticate `bundle install` (triggered by bundler-cache: true)
           # against GitHub Packages so private Fluence gems (e.g.
-          # fluence-ci-tools) can be fetched. The job declares
+          # guardian-ci) can be fetched. The job declares
           # `permissions: packages: read` to grant the GITHUB_TOKEN the
           # required scope; the env var hands it to Bundler.
           BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
@@ -70,19 +70,19 @@ jobs:
 
       # Invokes the gem's `lint --report` command (not `bundle exec
       # rubocop` directly) so the catalog defined in
-      # `Fluence::Ci::Tools::Steps#lint` is the single source of truth.
-      # The same `bundle exec fluence-ci lint --report` runs locally
-      # via the consumer's `bin/fluence-ci`, guaranteeing zero drift
+      # `Guardian::Ci::Steps#lint` is the single source of truth.
+      # The same `bundle exec guardian-ci lint --report` runs locally
+      # via the consumer's `bin/guardian-ci`, guaranteeing zero drift
       # between dev pre-push and CI.
-      - name: Run rubocop (via fluence-ci)
+      - name: Run rubocop (via guardian-ci)
         id: rubocop
         continue-on-error: true
         env:
           RUBOCOP_CACHE_ROOT: tmp/rubocop
-        run: bundle exec fluence-ci lint --report
+        run: bundle exec guardian-ci lint --report
 
       - name: Upload rubocop report
         uses: actions/upload-artifact@v7
         with:
           name: rubocop-report
-          path: tmp/fluence-report/rubocop.json
+          path: tmp/guardian-report/rubocop.json

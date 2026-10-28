@@ -1,7 +1,7 @@
 name: Ruby Gem — Docs Measure
 
-# Runs `fluence-ci docs --report` (in-process yardstick measure +
-# threshold check via Fluence::Ci::Tools::YardstickRunner — no rake
+# Runs `guardian-ci docs --report` (in-process yardstick measure +
+# threshold check via Guardian::Ci::YardstickRunner — no rake
 # dependency in the consumer's Rakefile), uploads the report as
 # `yardstick-report`, and exposes the step outcome as a job output.
 #
@@ -11,7 +11,7 @@ name: Ruby Gem — Docs Measure
 # - ruby-gem-docs-pr.yml on pull_request, to measure the PR head
 #   (no duplication: same reusable, same behaviour).
 #
-# The fluence-ci step runs with `continue-on-error: true`: a threshold
+# The guardian-ci step runs with `continue-on-error: true`: a threshold
 # failure does not abort the upload. The PR workflow consumes the
 # verify_outcome output to decide whether to fail the run (after
 # posting the sticky comment). The main-push invocation does not gate
@@ -23,7 +23,7 @@ on:
   workflow_call:
     outputs:
       verify_outcome:
-        description: Outcome of the `fluence-ci docs --report` step (`success` when coverage ≥ threshold, `failure` otherwise).
+        description: Outcome of the `guardian-ci docs --report` step (`success` when coverage ≥ threshold, `failure` otherwise).
         value: ${{ jobs.measure.outputs.verify_outcome }}
 
 permissions:
@@ -41,7 +41,7 @@ jobs:
 
       - name: Resolve Ruby version
         id: ruby
-        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v7
         with:
           runtime: ruby
 
@@ -49,7 +49,7 @@ jobs:
         env:
           # Authenticate `bundle install` (triggered by bundler-cache: true)
           # against GitHub Packages so private Fluence gems (e.g.
-          # fluence-ci-tools) can be fetched. The job declares
+          # guardian-ci) can be fetched. The job declares
           # `permissions: packages: read` to grant the GITHUB_TOKEN the
           # required scope; the env var hands it to Bundler.
           BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
@@ -73,14 +73,14 @@ jobs:
 
       - name: Run yardstick measure + verify (in-process)
         id: docs-report
-        # `fluence-ci docs --report` invokes the in-process
+        # `guardian-ci docs --report` invokes the in-process
         # YardstickRunner: it loads `.yardstick.yml`, measures, writes
         # `doc/yardstick_report.txt`, and exits 1 if coverage is below
         # the configured threshold. `continue-on-error` keeps the
         # upload step alive on threshold failure; the PR workflow reads
         # the step outcome via the job output to gate.
         continue-on-error: true
-        run: bundle exec fluence-ci docs --report
+        run: bundle exec guardian-ci docs --report
 
       - name: Upload yardstick report
         uses: actions/upload-artifact@v7

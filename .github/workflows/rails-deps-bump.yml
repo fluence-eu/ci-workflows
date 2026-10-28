@@ -34,7 +34,7 @@ permissions:
 
 jobs:
   deps:
-    uses: fluence-eu/ci-workflows/.github/workflows/deps-bump.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/deps-bump.yml@v7
     with:
       stack: rails
       scope: ${{ inputs.scope }}

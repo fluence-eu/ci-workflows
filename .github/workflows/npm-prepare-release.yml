@@ -50,7 +50,7 @@ jobs:
 
     steps:
       - id: app-token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v7
         with:
           client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -62,20 +62,20 @@ jobs:
 
       - name: Read .fluence-ci.yml
         id: cfg
-        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        uses: fluence-eu/ci-workflows/actions/read-config@v7
         with:
           keys: |
             package_paths=release.package_paths=package.json
             cross_pin_dependency=release.cross_pin_dependency=
 
-      - uses: fluence-eu/ci-workflows/actions/setup-release-bot-git@v6
+      - uses: fluence-eu/ci-workflows/actions/setup-release-bot-git@v7
         with:
           app-token: ${{ steps.app-token.outputs.token }}
           app-slug: ${{ steps.app-token.outputs.app-slug }}
 
       - name: Resolve Node version
         id: node
-        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v7
         with:
           runtime: node
           default: '22'
@@ -86,7 +86,7 @@ jobs:
           package-manager-cache: false
 
       - id: bump
-        uses: fluence-eu/ci-workflows/actions/bump-npm-package-versions@v6
+        uses: fluence-eu/ci-workflows/actions/bump-npm-package-versions@v7
         with:
           bump: ${{ inputs.bump }}
           package-paths: ${{ fromJSON(steps.cfg.outputs.values).package_paths }}
@@ -104,7 +104,7 @@ jobs:
           OUTPUT: CHANGELOG.md
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: fluence-eu/ci-workflows/actions/commit-release-branch@v6
+      - uses: fluence-eu/ci-workflows/actions/commit-release-branch@v7
         with:
           tag: ${{ steps.bump.outputs.tag }}
           files-to-stage: |
@@ -135,7 +135,7 @@ jobs:
             --body "$BODY")
           echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
 
-      - uses: fluence-eu/ci-workflows/actions/automerge-pr-with-retry@v6
+      - uses: fluence-eu/ci-workflows/actions/automerge-pr-with-retry@v7
         with:
           pr-url: ${{ steps.pr.outputs.url }}
           app-token: ${{ steps.app-token.outputs.token }}

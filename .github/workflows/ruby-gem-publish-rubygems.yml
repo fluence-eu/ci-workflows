@@ -1,0 +1,86 @@
+name: Ruby Gem — Publish to RubyGems.org
+
+# Kept apart from ruby-gem-publish.yml: its `id-token: write` would have
+# to be granted by every gem's publish.yml wrapper, private gems included,
+# or their publish run would fail at startup.
+#
+# The gem's rubygems.org trusted publisher must name this file as workflow
+# and fluence-eu/ci-workflows as workflow repository: the OIDC
+# `job_workflow_ref` claim points here, not at the consumer's wrapper.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Tag to publish. Optional when called from `on: release` (the event provides it); required when the consumer wrapper is dispatched manually.'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          TAG="${INPUT_TAG:-$EVENT_TAG}"
+          if [[ -z "$TAG" ]]; then
+            echo "ERROR: no tag provided via inputs and no release event context available." >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Resolve Ruby version
+        id: ruby
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v7
+        with:
+          runtime: ruby
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ steps.ruby.outputs.version }}
+
+      - name: Download gem assets from release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if gh release download "$TAG" \
+                 --repo "$GITHUB_REPOSITORY" \
+                 --pattern "*.gem" \
+                 --clobber; then
+              exit 0
+            fi
+            echo "download attempt ${attempt}/5 failed, retrying in 3s..."
+            sleep 3
+          done
+          echo "::error::Could not download *.gem from release ${TAG} after 5 attempts"
+          exit 1
+
+      - uses: rubygems/configure-rubygems-credentials@v2.1.0
+
+      - name: Push every downloaded gem to RubyGems.org
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          gems=(*.gem)
+          if [ "${#gems[@]}" -eq 0 ]; then
+            echo "::error::No .gem asset found on the release"
+            exit 1
+          fi
+          for gem in "${gems[@]}"; do
+            echo "Publishing ${gem}"
+            gem push --host https://rubygems.org "$gem"
+          done

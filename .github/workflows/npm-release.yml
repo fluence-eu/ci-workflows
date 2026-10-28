@@ -45,13 +45,13 @@ jobs:
 
     steps:
       - id: app-token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v7
         with:
           client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
 
       - id: verify
-        uses: fluence-eu/ci-workflows/actions/verify-release-author@v6
+        uses: fluence-eu/ci-workflows/actions/verify-release-author@v7
         with:
           app-slug: ${{ steps.app-token.outputs.app-slug }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -65,7 +65,7 @@ jobs:
       - name: Read .fluence-ci.yml
         id: cfg
         if: steps.verify.outputs.is_release == 'true'
-        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        uses: fluence-eu/ci-workflows/actions/read-config@v7
         with:
           keys: |
             package_paths=release.package_paths=package.json
@@ -74,7 +74,7 @@ jobs:
             notes_file=release.notes_file=
             build_command=release.build_command=npm run build --workspaces
 
-      - uses: fluence-eu/ci-workflows/actions/setup-release-bot-git@v6
+      - uses: fluence-eu/ci-workflows/actions/setup-release-bot-git@v7
         if: steps.verify.outputs.is_release == 'true'
         with:
           app-token: ${{ steps.app-token.outputs.token }}
@@ -82,11 +82,11 @@ jobs:
 
       - id: version
         if: steps.verify.outputs.is_release == 'true'
-        uses: fluence-eu/ci-workflows/actions/read-and-verify-npm-versions@v6
+        uses: fluence-eu/ci-workflows/actions/read-and-verify-npm-versions@v7
         with:
           package-paths: ${{ fromJSON(steps.cfg.outputs.values).package_paths }}
 
-      - uses: fluence-eu/ci-workflows/actions/tag-and-release@v6
+      - uses: fluence-eu/ci-workflows/actions/tag-and-release@v7
         if: steps.verify.outputs.is_release == 'true'
         with:
           tag: ${{ steps.version.outputs.tag }}
@@ -102,7 +102,7 @@ jobs:
       - name: Resolve Node version
         id: node
         if: steps.verify.outputs.is_release == 'true'
-        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v7
         with:
           runtime: node
           default: '22'

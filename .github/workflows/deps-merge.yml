@@ -29,7 +29,7 @@ jobs:
 
       - name: Read .fluence-ci.yml
         id: cfg
-        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        uses: fluence-eu/ci-workflows/actions/read-config@v7
         with:
           keys: |
             mergers=deps.mergers
@@ -95,7 +95,7 @@ jobs:
       - name: Resolve Ruby version
         id: ruby
         if: hashFiles('Gemfile.lock') != ''
-        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v7
         with:
           runtime: ruby
 
@@ -107,7 +107,7 @@ jobs:
       - name: Resolve Node version
         id: node
         if: hashFiles('package-lock.json') != ''
-        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v7
         with:
           runtime: node
 
@@ -118,7 +118,7 @@ jobs:
 
       - name: Merge the base branch
         id: update
-        uses: fluence-eu/ci-workflows/actions/deps-update-branch@v6
+        uses: fluence-eu/ci-workflows/actions/deps-update-branch@v7
         with:
           base_branch: ${{ github.event.repository.default_branch }}
 
@@ -161,7 +161,7 @@ jobs:
       - name: Generate fluence-deps token (push)
         id: push-token
         if: needs.update.result == 'success'
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v7
         with:
           client-id: ${{ vars.FLUENCE_DEPS_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_DEPS_BOT_PRIVATE_KEY }}
@@ -195,7 +195,7 @@ jobs:
 
       - name: Wait for PR checks
         id: wait
-        uses: fluence-eu/ci-workflows/actions/deps-wait-checks@v6
+        uses: fluence-eu/ci-workflows/actions/deps-wait-checks@v7
         env:
           GH_TOKEN: ${{ github.token }}
         with:
@@ -205,7 +205,7 @@ jobs:
 
       - name: Generate fluence-deps token (merge)
         id: token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v7
         with:
           client-id: ${{ vars.FLUENCE_DEPS_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_DEPS_BOT_PRIVATE_KEY }}

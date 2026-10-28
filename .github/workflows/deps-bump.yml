@@ -72,7 +72,7 @@ jobs:
 
       - name: Read .fluence-ci.yml
         id: cfg
-        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        uses: fluence-eu/ci-workflows/actions/read-config@v7
         with:
           keys: |
             verification=deps.verification=ci
@@ -89,7 +89,7 @@ jobs:
       - name: Resolve Ruby version
         id: ruby
         if: ${{ !contains(fromJSON('["vue-app","npm"]'), inputs.stack) }}
-        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v7
         with:
           runtime: ruby
 
@@ -101,7 +101,7 @@ jobs:
 
       - name: Install npm dependencies
         if: contains(fromJSON('["vue-app","npm"]'), inputs.stack)
-        uses: fluence-eu/ci-workflows/actions/deps-setup-node@v6
+        uses: fluence-eu/ci-workflows/actions/deps-setup-node@v7
         with:
           node-default: ${{ inputs.stack == 'npm' && '22' || '' }}
           npmrc-auth: ${{ secrets.NPMRC_AUTH }}
@@ -109,14 +109,14 @@ jobs:
       - name: List outdated gems
         id: gems
         if: ${{ !contains(fromJSON('["vue-app","npm"]'), inputs.stack) }}
-        uses: fluence-eu/ci-workflows/actions/deps-outdated@v6
+        uses: fluence-eu/ci-workflows/actions/deps-outdated@v7
         with:
           scope: ${{ inputs.scope }}
 
       - name: List outdated npm packages
         id: npm
         if: contains(fromJSON('["vue-app","npm"]'), inputs.stack)
-        uses: fluence-eu/ci-workflows/actions/deps-outdated-npm@v6
+        uses: fluence-eu/ci-workflows/actions/deps-outdated-npm@v7
         with:
           scope: ${{ inputs.scope }}
 
@@ -193,14 +193,14 @@ jobs:
 
       - name: Report denied tools
         if: always() && steps.claude.outputs.execution_file
-        uses: fluence-eu/ci-workflows/actions/deps-report-denials@v6
+        uses: fluence-eu/ci-workflows/actions/deps-report-denials@v7
         with:
           execution_file: ${{ steps.claude.outputs.execution_file }}
 
       - name: Guard plan
         id: guard
         if: steps.outdated.outputs.count != '0'
-        uses: fluence-eu/ci-workflows/actions/deps-plan-guard@v6
+        uses: fluence-eu/ci-workflows/actions/deps-plan-guard@v7
         with:
           plan: ${{ steps.claude.outputs.structured_output }}
           outdated_path: ${{ steps.outdated.outputs.path }}
@@ -284,7 +284,7 @@ jobs:
       - name: Resolve Ruby version
         id: ruby
         if: ${{ !contains(fromJSON('["vue-app","npm"]'), inputs.stack) }}
-        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v7
         with:
           runtime: ruby
 
@@ -296,7 +296,7 @@ jobs:
 
       - name: Install npm dependencies
         if: contains(fromJSON('["vue-app","npm"]'), inputs.stack)
-        uses: fluence-eu/ci-workflows/actions/deps-setup-node@v6
+        uses: fluence-eu/ci-workflows/actions/deps-setup-node@v7
         with:
           node-default: ${{ inputs.stack == 'npm' && '22' || '' }}
           npmrc-auth: ${{ secrets.NPMRC_AUTH }}
@@ -321,7 +321,7 @@ jobs:
 
       - name: Read .fluence-ci.yml
         id: cfg
-        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        uses: fluence-eu/ci-workflows/actions/read-config@v7
         with:
           keys: |
             smoke_commands=deps.smoke_commands=
@@ -342,7 +342,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Record warnings before the change
-        uses: fluence-eu/ci-workflows/actions/deps-warnings@v6
+        uses: fluence-eu/ci-workflows/actions/deps-warnings@v7
         with:
           commands: ${{ steps.smoke.outputs.commands }}
           file: ${{ runner.temp }}/deps-warnings/before.txt
@@ -433,17 +433,17 @@ jobs:
 
       - name: Report denied tools
         if: always() && steps.claude.outputs.execution_file
-        uses: fluence-eu/ci-workflows/actions/deps-report-denials@v6
+        uses: fluence-eu/ci-workflows/actions/deps-report-denials@v7
         with:
           execution_file: ${{ steps.claude.outputs.execution_file }}
 
       - name: Check dependency scope
-        uses: fluence-eu/ci-workflows/actions/deps-check-scope@v6
+        uses: fluence-eu/ci-workflows/actions/deps-check-scope@v7
         with:
           base-file: ${{ runner.temp }}/deps/base_sha
 
       - name: Check new warnings
-        uses: fluence-eu/ci-workflows/actions/deps-warnings@v6
+        uses: fluence-eu/ci-workflows/actions/deps-warnings@v7
         with:
           commands: ${{ steps.smoke.outputs.commands }}
           file: ${{ runner.temp }}/deps-warnings/after.txt
@@ -526,7 +526,7 @@ jobs:
       - name: Generate fluence-deps token
         id: token
         if: steps.dl.outcome == 'success'
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v7
         with:
           client-id: ${{ vars.FLUENCE_DEPS_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_DEPS_BOT_PRIVATE_KEY }}
@@ -558,7 +558,7 @@ jobs:
       - name: Wait for PR checks
         id: wait
         if: steps.pr.outputs.number && env.VERIFICATION == 'ci'
-        uses: fluence-eu/ci-workflows/actions/deps-wait-checks@v6
+        uses: fluence-eu/ci-workflows/actions/deps-wait-checks@v7
         with:
           pr: ${{ steps.pr.outputs.number }}
           label: published
@@ -590,7 +590,7 @@ jobs:
       groups: ${{ steps.select.outputs.groups }}
     steps:
       - id: select
-        uses: fluence-eu/ci-workflows/actions/deps-select-groups@v6
+        uses: fluence-eu/ci-workflows/actions/deps-select-groups@v7
         with:
           groups: ${{ needs.plan.outputs.groups }}
           stages: published
@@ -605,7 +605,7 @@ jobs:
       max-parallel: 2
       matrix:
         slug: ${{ fromJSON(needs.to-retry.outputs.slugs) }}
-    uses: fluence-eu/ci-workflows/.github/workflows/deps-bump-retry.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/deps-bump-retry.yml@v7
     with:
       stack: ${{ inputs.stack }}
       group: ${{ toJSON(fromJSON(needs.to-retry.outputs.by_slug)[matrix.slug]) }}
@@ -636,7 +636,7 @@ jobs:
       groups: ${{ steps.select.outputs.groups }}
     steps:
       - id: select
-        uses: fluence-eu/ci-workflows/actions/deps-select-groups@v6
+        uses: fluence-eu/ci-workflows/actions/deps-select-groups@v7
         with:
           groups: ${{ needs.plan.outputs.groups }}
           stages: retry-checked
@@ -651,7 +651,7 @@ jobs:
       max-parallel: 2
       matrix:
         slug: ${{ fromJSON(needs.to-last-retry.outputs.slugs) }}
-    uses: fluence-eu/ci-workflows/.github/workflows/deps-bump-retry.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/deps-bump-retry.yml@v7
     with:
       stack: ${{ inputs.stack }}
       group: ${{ toJSON(fromJSON(needs.to-last-retry.outputs.by_slug)[matrix.slug]) }}
@@ -682,7 +682,7 @@ jobs:
       groups: ${{ steps.select.outputs.groups }}
     steps:
       - id: select
-        uses: fluence-eu/ci-workflows/actions/deps-select-groups@v6
+        uses: fluence-eu/ci-workflows/actions/deps-select-groups@v7
         with:
           groups: ${{ needs.plan.outputs.groups }}
           stages: last-retry-checked last-retry-fixed retry-checked retry-fixed published
@@ -726,7 +726,7 @@ jobs:
       - name: Generate fluence-deps token
         id: token
         if: contains(fromJSON('["fail","none","pending"]'), steps.final.outputs.state)
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v7
         with:
           client-id: ${{ vars.FLUENCE_DEPS_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_DEPS_BOT_PRIVATE_KEY }}
@@ -772,7 +772,7 @@ jobs:
     steps:
       - name: Generate fluence-deps token
         id: token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v7
         with:
           client-id: ${{ vars.FLUENCE_DEPS_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_DEPS_BOT_PRIVATE_KEY }}

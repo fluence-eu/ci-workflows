@@ -41,7 +41,7 @@ jobs:
 
       - name: Resolve Ruby version
         id: ruby
-        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v7
         with:
           runtime: ruby
 
@@ -49,7 +49,7 @@ jobs:
         env:
           # Authenticate `bundle install` (triggered by bundler-cache: true)
           # against GitHub Packages so private Fluence gems (e.g.
-          # fluence-ci-tools) can be fetched. The job declares
+          # guardian-ci) can be fetched. The job declares
           # `permissions: packages: read` to grant the GITHUB_TOKEN the
           # required scope; the env var hands it to Bundler.
           BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
@@ -59,22 +59,22 @@ jobs:
 
       # Invokes the gem's `security --report` command (not the three
       # tools individually) so the catalog defined in
-      # `Fluence::Ci::Tools::Steps#security` is the single source of
+      # `Guardian::Ci::Steps#security` is the single source of
       # truth. The same command runs locally via the consumer's
-      # `bin/fluence-ci`, guaranteeing zero drift between dev pre-push
+      # `bin/guardian-ci`, guaranteeing zero drift between dev pre-push
       # and CI. The combined exit code is used as the single outcome;
       # the security-report composite reads each tool's output file
       # to render the per-tool ✓/✗ in the sticky comment.
-      - name: Run security suite (via fluence-ci)
+      - name: Run security suite (via guardian-ci)
         id: security
         continue-on-error: true
-        run: bundle exec fluence-ci security --report
+        run: bundle exec guardian-ci security --report
 
       - name: Upload security report
         uses: actions/upload-artifact@v7
         with:
           name: security-report
           path: |
-            tmp/fluence-report/brakeman.json
-            tmp/fluence-report/audit.txt
-            tmp/fluence-report/ruby_audit.txt
+            tmp/guardian-report/brakeman.json
+            tmp/guardian-report/audit.txt
+            tmp/guardian-report/ruby_audit.txt

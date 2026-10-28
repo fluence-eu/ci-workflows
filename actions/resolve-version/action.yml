@@ -27,7 +27,7 @@ runs:
   using: composite
   steps:
     - id: cfg
-      uses: fluence-eu/ci-workflows/actions/read-config@v6
+      uses: fluence-eu/ci-workflows/actions/read-config@v7
       with:
         keys: version=${{ inputs.runtime }}_version=
     - id: resolve

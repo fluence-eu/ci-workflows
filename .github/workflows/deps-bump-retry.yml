@@ -95,7 +95,7 @@ jobs:
       - name: Resolve Ruby version
         id: ruby
         if: steps.prev.outputs.state == 'fail' && !contains(fromJSON('["vue-app","npm"]'), inputs.stack)
-        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v7
         with:
           runtime: ruby
 
@@ -107,7 +107,7 @@ jobs:
 
       - name: Install npm dependencies
         if: steps.prev.outputs.state == 'fail' && contains(fromJSON('["vue-app","npm"]'), inputs.stack)
-        uses: fluence-eu/ci-workflows/actions/deps-setup-node@v6
+        uses: fluence-eu/ci-workflows/actions/deps-setup-node@v7
         with:
           node-default: ${{ inputs.stack == 'npm' && '22' || '' }}
           npmrc-auth: ${{ secrets.NPMRC_AUTH }}
@@ -125,7 +125,7 @@ jobs:
       - name: Read .fluence-ci.yml
         id: cfg
         if: steps.prev.outputs.state == 'fail'
-        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        uses: fluence-eu/ci-workflows/actions/read-config@v7
         with:
           keys: |
             smoke_commands=deps.smoke_commands=
@@ -148,7 +148,7 @@ jobs:
 
       - name: Record warnings before the change
         if: steps.prev.outputs.state == 'fail'
-        uses: fluence-eu/ci-workflows/actions/deps-warnings@v6
+        uses: fluence-eu/ci-workflows/actions/deps-warnings@v7
         with:
           commands: ${{ steps.smoke.outputs.commands }}
           file: ${{ runner.temp }}/deps-warnings/before.txt
@@ -190,19 +190,19 @@ jobs:
 
       - name: Report denied tools
         if: always() && steps.claude.outputs.execution_file
-        uses: fluence-eu/ci-workflows/actions/deps-report-denials@v6
+        uses: fluence-eu/ci-workflows/actions/deps-report-denials@v7
         with:
           execution_file: ${{ steps.claude.outputs.execution_file }}
 
       - name: Check dependency scope
         if: steps.prev.outputs.state == 'fail'
-        uses: fluence-eu/ci-workflows/actions/deps-check-scope@v6
+        uses: fluence-eu/ci-workflows/actions/deps-check-scope@v7
         with:
           base-file: ${{ runner.temp }}/deps/base_sha
 
       - name: Check new warnings
         if: steps.prev.outputs.state == 'fail'
-        uses: fluence-eu/ci-workflows/actions/deps-warnings@v6
+        uses: fluence-eu/ci-workflows/actions/deps-warnings@v7
         with:
           commands: ${{ steps.smoke.outputs.commands }}
           file: ${{ runner.temp }}/deps-warnings/after.txt
@@ -267,7 +267,7 @@ jobs:
       - name: Generate fluence-deps token
         id: token
         if: steps.fix.outputs.pushable == 'true'
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v7
         with:
           client-id: ${{ vars.FLUENCE_DEPS_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_DEPS_BOT_PRIVATE_KEY }}
@@ -284,7 +284,7 @@ jobs:
       - name: Wait for PR checks
         id: wait
         if: steps.fix.outputs.pushable == 'true'
-        uses: fluence-eu/ci-workflows/actions/deps-wait-checks@v6
+        uses: fluence-eu/ci-workflows/actions/deps-wait-checks@v7
         with:
           pr: ${{ steps.fix.outputs.pr }}
           label: ${{ inputs.stage }}

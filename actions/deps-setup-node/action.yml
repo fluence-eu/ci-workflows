@@ -16,14 +16,14 @@ runs:
   steps:
     - name: Read .fluence-ci.yml
       id: cfg
-      uses: fluence-eu/ci-workflows/actions/read-config@v6
+      uses: fluence-eu/ci-workflows/actions/read-config@v7
       with:
         keys: |
           pre_install_command=pre_install_command=
 
     - name: Resolve Node version
       id: node
-      uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+      uses: fluence-eu/ci-workflows/actions/resolve-version@v7
       with:
         runtime: node
         default: ${{ inputs.node-default }}

@@ -1,8 +1,8 @@
 # Contributing
 
-Thanks for contributing! This repo hosts reusable GitHub Actions workflows shared across [fluence-eu](https://github.com/fluence-eu) projects. Every change is consumed automatically by those repos once the active major tag (`@v6`) moves, so small mistakes have a wide blast radius.
+Thanks for contributing! This repo hosts reusable GitHub Actions workflows shared across [fluence-eu](https://github.com/fluence-eu) projects. Every change is consumed automatically by those repos once the active major tag (`@v7`) moves, so small mistakes have a wide blast radius.
 
-**Direct push to `main` is forbidden.** All changes — including doc updates and one-line fixes — go through a pull request. The active major tag (`@v6`) is moved by the maintainer who merges the PR, so any drift between `main` and the active major reflects an explicit decision (e.g. cutting the next major).
+**Direct push to `main` is forbidden.** All changes — including doc updates and one-line fixes — go through a pull request. The active major tag (`@v7`) is moved by the maintainer who merges the PR, so any drift between `main` and the active major reflects an explicit decision (e.g. cutting the next major).
 
 Standard flow:
 
@@ -11,7 +11,7 @@ Standard flow:
 3. Implement the change
 4. Test it end-to-end from a consumer PR (see "Testing changes" below)
 5. Open a pull request targeting `main`
-6. After merge — move the active major tag (`@v6`) to the new main HEAD if the change is non-breaking (see "Versioning" below)
+6. After merge — move the active major tag (`@v7`) to the new main HEAD if the change is non-breaking (see "Versioning" below)
 
 ---
 
@@ -38,7 +38,7 @@ Family prefixes:
 - `app-*` — rolling-release apps (any language): timestamp tag, changelog auto-merged on `develop`, force-push mirror to `main`.
 - `rails-*` — Rails-app-specific checks (security scan, future test/coverage variants with postgres, etc.). Use this prefix only for reusables that genuinely need Rails (not just Ruby).
 
-If you need a new family, coordinate on the issue first — consumers already pin `@v6` across all three.
+If you need a new family, coordinate on the issue first — consumers already pin `@v7` across all three.
 
 ---
 
@@ -105,7 +105,7 @@ This keeps consumer wrapper files byte-identical across the repos of a family (t
 
 ### 7. Helper scripts via composite actions
 
-Ruby helpers (`coverage_report.rb`, `yardstick_report.rb`, `rubocop_report.rb`) are wrapped as composite actions under `actions/{name}-report/`. Each composite action declares its inputs, calls the Ruby script via `${GITHUB_ACTION_PATH}`, and exposes the Markdown body as an output. The reusable PR workflows consume them via `uses: fluence-eu/ci-workflows/actions/{name}-report@v6` — no sidecar checkout, no dedicated GitHub App.
+Ruby helpers (`coverage_report.rb`, `yardstick_report.rb`, `rubocop_report.rb`) are wrapped as composite actions under `actions/{name}-report/`. Each composite action declares its inputs, calls the Ruby script via `${GITHUB_ACTION_PATH}`, and exposes the Markdown body as an output. The reusable PR workflows consume them via `uses: fluence-eu/ci-workflows/actions/{name}-report@v7` — no sidecar checkout, no dedicated GitHub App.
 
 When you add a helper:
 - Create `actions/<name>-report/` with an `action.yml` (declare inputs + `outputs.body.value`) and the Ruby script next to it
@@ -119,23 +119,23 @@ When you add a helper:
 
 ### Active major tag is mobile
 
-The current major tag (`v6` as of writing — `v1` through `v5` are frozen at their last commits) is force-moved to every new commit on `main`. Consumers pin the active major and pick up non-breaking changes automatically. **The maintainer merging a PR is responsible for moving the tag** — the move is an explicit step that gates the change reaching consumers.
+The current major tag (`v7` as of writing — `v1` through `v6` are frozen at their last commits) is force-moved to every new commit on `main`. Consumers pin the active major and pick up non-breaking changes automatically. **The maintainer merging a PR is responsible for moving the tag** — the move is an explicit step that gates the change reaching consumers.
 
 Two ways to do it:
 
 **From the GitHub UI** (preferred):
 1. Open *Actions* → *Move major tag* → *Run workflow*.
-2. Pass the major tag (`v6` to fast-forward, `v7` to cut the next major) and leave `ref` empty to point at main HEAD.
+2. Pass the major tag (`v7` to fast-forward, `v8` to cut the next major) and leave `ref` empty to point at main HEAD.
 
 **Locally**:
 ```bash
 git fetch origin main
 git checkout main && git pull
-git tag -f v6                # current major
-git push origin v6 --force
+git tag -f v7                # current major
+git push origin v7 --force
 ```
 
-If your PR contains a breaking change (see below), do not move the current major — cut the next one (`v7`) instead.
+If your PR contains a breaking change (see below), do not move the current major — cut the next one (`v8`) instead.
 
 ### What counts as breaking
 
@@ -162,7 +162,7 @@ Temporarily pin consumers to a branch while iterating:
 uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-docs-pr.yml@refactor/my-branch
 ```
 
-Move back to `@v6` before merging either side.
+Move back to `@v7` before merging either side.
 
 ---
 
@@ -181,7 +181,7 @@ This repo has no self-contained test suite — the contract is the consumer pipe
    - Each job produces the expected artifacts / PR comment / release asset
    - Skipped jobs are truly unused triggers, not masked failures
 
-3. **Main merge + tag move.** Only once the consumer PR goes green, merge your ci-workflows PR and move the active major tag (`@v6`). Repin the consumer PR to `@v6`, confirm it still passes, then merge.
+3. **Main merge + tag move.** Only once the consumer PR goes green, merge your ci-workflows PR and move the active major tag (`@v7`). Repin the consumer PR to `@v7`, confirm it still passes, then merge.
 
 ---
 
@@ -209,7 +209,7 @@ Do not include `Co-Authored-By:` trailers or any AI attribution.
 - [ ] Every new input carries a runtime value or internal wiring — per-project options go to `.fluence-ci.yml` (principle #6), with a `description:` and a default (or genuinely required and documented)
 - [ ] `github.event.*` / user-controllable values go through `env:`, not inline `${{ }}` in `run:`
 - [ ] Tested from at least one consumer PR with a branch pin
-- [ ] Decided whether this is an active-major fast-forward (`@v6`) or a new major cut (`@v7`)
+- [ ] Decided whether this is an active-major fast-forward (`@v7`) or a new major cut (`@v8`)
 - [ ] README.md updated if inputs, outputs, or the consumer contract changed
 
 ---

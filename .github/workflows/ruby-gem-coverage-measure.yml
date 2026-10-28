@@ -1,7 +1,7 @@
 name: Ruby Gem — Coverage Measure
 
-# Runs `bundle exec fluence-ci tests` (catalog defined in
-# Fluence::Ci::Tools::Steps — auto-detects rspec via
+# Runs `bundle exec guardian-ci tests` (catalog defined in
+# Guardian::Ci::Steps — auto-detects rspec via
 # `spec/spec_helper.rb`, minitest via `test/test_helper.rb`, Rails
 # via `bin/rails`) with SimpleCov enabled, and uploads the resulting
 # `coverage/` folder as the `coverage` artifact. Rubocop is
@@ -34,14 +34,14 @@ jobs:
 
       - name: Read .fluence-ci.yml
         id: cfg
-        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        uses: fluence-eu/ci-workflows/actions/read-config@v7
         with:
           keys: |
             command=coverage.command=
 
       - name: Resolve Ruby version
         id: ruby
-        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v7
         with:
           runtime: ruby
 
@@ -49,7 +49,7 @@ jobs:
         env:
           # Authenticate `bundle install` (triggered by bundler-cache: true)
           # against GitHub Packages so private Fluence gems (e.g.
-          # fluence-ci-tools) can be fetched. The job declares
+          # guardian-ci) can be fetched. The job declares
           # `permissions: packages: read` to grant the GITHUB_TOKEN the
           # required scope; the env var hands it to Bundler.
           BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
@@ -67,9 +67,9 @@ jobs:
         shell: bash
         run: |
           if [ -n "$COMMAND" ]; then
-            bundle exec fluence-ci tests --command "$COMMAND"
+            bundle exec guardian-ci tests --command "$COMMAND"
           else
-            bundle exec fluence-ci tests
+            bundle exec guardian-ci tests
           fi
 
       - name: Upload coverage artifact

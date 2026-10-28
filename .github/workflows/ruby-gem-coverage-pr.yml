@@ -45,7 +45,7 @@ jobs:
       skip_release_pr: ${{ steps.check.outputs.skip }}
     steps:
       - id: token
-        uses: fluence-eu/ci-workflows/actions/release-app-token@v6
+        uses: fluence-eu/ci-workflows/actions/release-app-token@v7
         with:
           client-id: ${{ vars.FLUENCE_RELEASE_BOT_CLIENT_ID }}
           private-key: ${{ secrets.FLUENCE_RELEASE_BOT_PRIVATE_KEY }}
@@ -71,7 +71,7 @@ jobs:
     name: Measure
     needs: resolve-bot
     if: needs.resolve-bot.outputs.skip_release_pr == 'false'
-    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-measure.yml@v6
+    uses: fluence-eu/ci-workflows/.github/workflows/ruby-gem-coverage-measure.yml@v7
 
   comment:
     name: Comment on PR
@@ -90,7 +90,7 @@ jobs:
 
       - name: Read .fluence-ci.yml
         id: cfg
-        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        uses: fluence-eu/ci-workflows/actions/read-config@v7
         with:
           keys: |
             include_files=coverage.include_files=lib/**/*.rb
@@ -98,7 +98,7 @@ jobs:
 
       - name: Resolve Ruby version
         id: ruby
-        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v7
         with:
           runtime: ruby
 
@@ -106,7 +106,7 @@ jobs:
         env:
           # Authenticate `bundle install` (triggered by bundler-cache: true)
           # against GitHub Packages so private Fluence gems (e.g.
-          # fluence-ci-tools) can be fetched. The job declares
+          # guardian-ci) can be fetched. The job declares
           # `permissions: packages: read` to grant the GITHUB_TOKEN the
           # required scope; the env var hands it to Bundler.
           BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
@@ -122,7 +122,7 @@ jobs:
 
       - name: Find latest base-branch run with coverage artifact
         id: base-run
-        uses: fluence-eu/ci-workflows/actions/find-base-run@v6
+        uses: fluence-eu/ci-workflows/actions/find-base-run@v7
         with:
           workflow_file: ${{ inputs.measure_workflow_file }}
 
@@ -162,14 +162,14 @@ jobs:
           fi
 
       - id: body
-        uses: fluence-eu/ci-workflows/actions/coverage-report@v6
+        uses: fluence-eu/ci-workflows/actions/coverage-report@v7
         with:
           outcome:   ${{ steps.coverage.outcome }}
           base_ref:  origin/${{ github.base_ref }}
           pr_path:   coverage/.resultset.json
           base_path: ${{ steps.base.outputs.path }}
 
-      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v6
+      - uses: fluence-eu/ci-workflows/actions/post-sticky-comment@v7
         with:
           marker:          '<!-- coverage-report -->'
           body:            ${{ steps.body.outputs.body }}

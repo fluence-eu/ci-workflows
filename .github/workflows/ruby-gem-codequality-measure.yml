@@ -1,9 +1,9 @@
 name: Ruby Gem — Code Quality Measure
 
 # Runs reek + flog + flay against the consumer's source paths via the
-# `fluence-ci codequality --report` CLI (catalog defined in
-# Fluence::Ci::Tools::Steps), which writes the three machine-readable
-# reports under `tmp/fluence-report/` for upload as the
+# `guardian-ci codequality --report` CLI (catalog defined in
+# Guardian::Ci::Steps), which writes the three machine-readable
+# reports under `tmp/guardian-report/` for upload as the
 # `codequality-report` artifact.
 #
 # Advisory only — none of the tools fail the workflow on findings;
@@ -17,7 +17,7 @@ name: Ruby Gem — Code Quality Measure
 # apps/engines (when `app/` exists), `lib` otherwise. Consumers with
 # a non-standard layout (monorepo / custom subdirs) can override via
 # the `codequality.paths` key of their `.fluence-ci.yml` — it is
-# forwarded to `fluence-ci codequality --paths "..."` so the catalog
+# forwarded to `guardian-ci codequality --paths "..."` so the catalog
 # method's auto-detection is bypassed.
 #
 # Called from two places (mirrors ruby-gem-{docs,coverage,rubocop}-measure):
@@ -42,14 +42,14 @@ jobs:
 
       - name: Read .fluence-ci.yml
         id: cfg
-        uses: fluence-eu/ci-workflows/actions/read-config@v6
+        uses: fluence-eu/ci-workflows/actions/read-config@v7
         with:
           keys: |
             paths=codequality.paths=
 
       - name: Resolve Ruby version
         id: ruby
-        uses: fluence-eu/ci-workflows/actions/resolve-version@v6
+        uses: fluence-eu/ci-workflows/actions/resolve-version@v7
         with:
           runtime: ruby
 
@@ -57,7 +57,7 @@ jobs:
         env:
           # Authenticate `bundle install` (triggered by bundler-cache: true)
           # against GitHub Packages so private Fluence gems (e.g.
-          # fluence-ci-tools) can be fetched. The job declares
+          # guardian-ci) can be fetched. The job declares
           # `permissions: packages: read` to grant the GITHUB_TOKEN the
           # required scope; the env var hands it to Bundler.
           BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
@@ -67,7 +67,7 @@ jobs:
 
       - name: Run codequality (reek + flog + flay)
         # `--report` switches the catalog group to its machine-readable
-        # mode: reek/flog/flay write to tmp/fluence-report/{reek.json,
+        # mode: reek/flog/flay write to tmp/guardian-report/{reek.json,
         # flog.txt,flay.txt}. The CLI does not fail on findings — these
         # tools are advisory; the PR sticky comment surfaces trends.
         # `continue-on-error` is kept defensively so a tool crash
@@ -81,17 +81,17 @@ jobs:
         shell: bash
         run: |
           if [ -n "$PATHS" ]; then
-            bundle exec fluence-ci codequality --report --paths "$PATHS"
+            bundle exec guardian-ci codequality --report --paths "$PATHS"
           else
-            bundle exec fluence-ci codequality --report
+            bundle exec guardian-ci codequality --report
           fi
 
       - name: Upload codequality report
         uses: actions/upload-artifact@v7
         with:
           name: codequality-report
-          # The common ancestor (`tmp/fluence-report/`) is stripped by
+          # The common ancestor (`tmp/guardian-report/`) is stripped by
           # upload-artifact, so the artifact root contains the bare
           # files (reek.json, flog.txt, flay.txt) — same shape the PR
           # workflow already expects.
-          path: tmp/fluence-report/*
+          path: tmp/guardian-report/*
