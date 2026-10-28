@@ -36,7 +36,7 @@ jobs:
         env:
           # Authenticate `bundle install` (triggered by bundler-cache: true)
           # against GitHub Packages so private Fluence gems (e.g.
-          # fluence-ci-tools) can be fetched. The job declares
+          # guardian-ci) can be fetched. The job declares
           # `permissions: packages: read` to grant the GITHUB_TOKEN the
           # required scope; the env var hands it to Bundler.
           BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}
@@ -59,14 +59,14 @@ jobs:
           restore-keys: yard-${{ runner.os }}-${{ steps.ruby.outputs.version }}-
 
       - name: Build YARD site
-        # `fluence-ci docs --build` (fluence-ci-tools v0.6+) invokes
+        # `guardian-ci docs --build` invokes
         # `bundle exec yard doc` under the catalog. Same effective
         # behaviour as a direct yard CLI call, but routes through the
         # central catalog so the docs-deploy step lines up with the
         # rest of the v3 reusables (no consumer Rakefile dependency,
         # one CLI surface end to end). Output path (`doc/`) unchanged
         # — picked up by the next step.
-        run: bundle exec fluence-ci docs --build
+        run: bundle exec guardian-ci docs --build
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5

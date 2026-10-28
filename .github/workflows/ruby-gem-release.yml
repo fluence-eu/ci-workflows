@@ -72,7 +72,7 @@ jobs:
         env:
           # Authenticate `bundle install` (triggered by bundler-cache: true)
           # against GitHub Packages so private Fluence gems (e.g.
-          # fluence-ci-tools) can be fetched. The job declares
+          # guardian-ci) can be fetched. The job declares
           # `permissions: packages: read` to grant the GITHUB_TOKEN the
           # required scope; the env var hands it to Bundler.
           BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}

@@ -6,7 +6,7 @@ Workflow families:
 
 | Prefix | Pattern | Used by |
 |---|---|---|
-| `ruby-gem-*` | Semver bump, `.gemspec` build, attach to GitHub Release, push to GitHub Packages — plus the shared Ruby quality gates (rubocop, codequality, coverage, docs) that any Ruby consumer wires up | `fluence-gateway-client`, `fluence-gateway-auth-ruby`, `fluence-ci-tools`, `mosaic-sdk` (release flow) + `gateway-back`, `ledger-back` (quality gates only) |
+| `ruby-gem-*` | Semver bump, `.gemspec` build, attach to GitHub Release, push to GitHub Packages — plus the shared Ruby quality gates (rubocop, codequality, coverage, docs) that any Ruby consumer wires up | `fluence-gateway-client`, `fluence-gateway-auth-ruby`, `guardian-ci`, `mosaic-sdk` (release flow) + `gateway-back`, `ledger-back` (quality gates only) |
 | `app-*` | Timestamp tag, git-cliff changelog auto-merged on the working branch, force-push mirror to `main` | `gateway-back`, `ledger-back` |
 | `rails-*` | Rails-app-specific checks (brakeman, bundler-audit, ruby-audit) | `gateway-back`, `ledger-back` |
 | `vue-app-*` | Vue / Node frontend gates (`vue-tsc`, `eslint`, `prettier`, `vitest`) with sticky-comment diff vs baseline | `vision-front`, `fluence-gateway-auth-vue` |
@@ -711,42 +711,42 @@ Without the app install, the runtime call to `actions/create-github-app-token` r
 
 PR-side reusables (`ruby-gem-rubocop-pr`, `ruby-gem-coverage-pr`, `ruby-gem-codequality-pr`, `rails-security-pr`, `ruby-gem-docs-pr`) and their `*-measure` counterparts run `bundle install` then invoke `rubocop`, `reek`, `flog`, `flay`, `brakeman`, `bundler-audit`, `ruby_audit`, `yard`, `yardstick`, `simplecov`, `undercover`. The consumer repo must therefore ship those tools in its bundle.
 
-Add the [`fluence-ci-tools`](https://github.com/fluence-eu/fluence-ci-tools) meta-gem to the `Gemfile`:
+Add the [`guardian-ci`](https://github.com/fluence-eu/guardian-ci) meta-gem to the `Gemfile`:
 
 ```ruby
 source 'https://rubygems.pkg.github.com/fluence-eu' do
-  gem 'fluence-ci-tools', require: false
+  gem 'guardian-ci', require: false
 end
 ```
 
-It pulls in all the tools above with the version pins the centralised workflows expect. Bumping a tool is `bundle update fluence-ci-tools`.
+It pulls in all the tools above with the version pins the centralised workflows expect. Bumping a tool is `bundle update guardian-ci`.
 
-Because `fluence-ci-tools` lives on GitHub Packages (private), each consumer workflow that runs `bundle install` must:
+Because `guardian-ci` lives on GitHub Packages (private), each consumer workflow that runs `bundle install` must:
 
 - Grant `packages: read` on the calling job's `permissions:` block.
 - Set `BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}` as workflow-level env so Bundler can authenticate against the registry.
-- **Be allow-listed on the package itself.** Per-package access is not org-inherited — open each private package's settings (e.g. https://github.com/orgs/fluence-eu/packages/rubygems/package/fluence-ci-tools/settings) → **Manage Actions access** → **Add repository** → select the new consumer repo → Role: **Read**. Repeat for every entry inside the `source 'https://rubygems.pkg.github.com/fluence-eu' do … end` block of the Gemfile (`mosaic-sdk`, `money-fluence-exchange`, `fluence-gateway-auth-ruby`, …). Without this, `bundle install` fails with `authentication is required` even when `packages: read` and the `BUNDLE_…` env var are set correctly.
+- **Be allow-listed on the package itself.** Per-package access is not org-inherited — open each private package's settings (e.g. https://github.com/orgs/fluence-eu/packages/rubygems/package/guardian-ci/settings) → **Manage Actions access** → **Add repository** → select the new consumer repo → Role: **Read**. Repeat for every entry inside the `source 'https://rubygems.pkg.github.com/fluence-eu' do … end` block of the Gemfile (`mosaic-sdk`, `money-fluence-exchange`, `fluence-gateway-auth-ruby`, …). Without this, `bundle install` fails with `authentication is required` even when `packages: read` and the `BUNDLE_…` env var are set correctly.
 
 The reusables in this repo already declare `packages: read` at the workflow level — consumers just need to forward the permission via their wrapper (see the templates above).
 
 ### Local CI orchestration (optional)
 
-Since v0.3.0, `fluence-ci-tools` also ships a Rails generator and a `fluence-ci` CLI that scaffold a local `bin/ci` orchestration mirroring this catalog of reusables. Useful for devs who want to run the same checks pre-push without waiting for CI.
+`guardian-ci` also ships a Rails generator and a `guardian-ci` CLI that scaffold a local CI orchestration mirroring this catalog of reusables. Useful for devs who want to run the same checks pre-push without waiting for CI.
 
-**Rails app** — generator integrated with Rails 8's native `bin/ci` (`ActiveSupport::ContinuousIntegration`):
+**Rails app** — the generator writes a standalone `bin/guardian-ci` that runs side-by-side with Rails 8's native `bin/ci`, without touching `config/ci.rb`:
 ```bash
-bin/rails generate fluence_ci:install   # injects extend + all() into config/ci.rb
-bin/ci                                    # runs Rails defaults + Fluence catalog
+bin/rails generate guardian_ci:install    # writes bin/guardian-ci
+bin/ci && bin/guardian-ci                 # runs Rails defaults, then the catalog
 ```
 
 **Pure gem** — Thor CLI generates a Rake task:
 ```bash
-bundle exec fluence-ci install            # writes lib/tasks/fluence_ci.rake
-bundle exec rake fluence_ci:check         # runs the whole catalog
-bundle exec rake fluence_ci:codequality   # or any single group
+bundle exec guardian-ci install           # writes lib/tasks/guardian_ci.rake
+bundle exec rake guardian_ci:check        # runs the whole catalog
+bundle exec rake guardian_ci:codequality  # or any single group
 ```
 
-The generator's injected `all` call uses dynamic dispatch over `Fluence::Ci::Tools::Steps` — when the gem ships a new step group (e.g. `accessibility`), consumers pick it up via `bundle update fluence-ci-tools` without editing their `config/ci.rb` or rake task. Per-group args are overridable: `all(codequality: { paths: 'custom' })`.
+Both the generated `bin/guardian-ci` and the rake task dispatch dynamically over `Guardian::Ci::Steps` — when the gem ships a new step group (e.g. `accessibility`), consumers pick it up via `bundle update guardian-ci` without editing either file. Per-group args are overridable: `all(codequality: { paths: 'custom' })`.
 
 ---
 
