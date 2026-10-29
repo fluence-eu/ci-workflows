@@ -44,7 +44,7 @@ runs:
   using: composite
   steps:
     - id: read
-      uses: fluence-eu/ci-workflows/actions/read-and-verify-ruby-gem-versions@v5
+      uses: fluence-eu/ci-workflows/actions/read-and-verify-ruby-gem-versions@v7
       with:
         gem-specs: ${{ inputs.gem-specs }}
 

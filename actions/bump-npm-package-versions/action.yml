@@ -40,7 +40,7 @@ runs:
   using: composite
   steps:
     - id: read
-      uses: fluence-eu/ci-workflows/actions/read-and-verify-npm-versions@v5
+      uses: fluence-eu/ci-workflows/actions/read-and-verify-npm-versions@v7
       with:
         package-paths: ${{ inputs.package-paths }}
 
