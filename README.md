@@ -1,19 +1,31 @@
 # ci-workflows
 
-Reusable GitHub Actions workflows shared across [fluence-eu](https://github.com/fluence-eu) projects — **gems** (semver release + packages push), **npm packages** (mono/multi-package release + packages push), **Rails apps** (rolling release + main mirror), and **Vue / Node frontends** (quality gates with sticky-comment diff).
+Reusable GitHub Actions workflows built for the [fluence-eu](https://github.com/fluence-eu) projects — **gems** (semver or dated release, push to GitHub Packages and rubygems.org), **npm packages** (mono/multi-package release + packages push), **Rails apps** (rolling release + main mirror), and **Vue / Node frontends** (quality gates with sticky-comment diff).
 
 Workflow families:
 
-| Prefix | Pattern | Used by |
-|---|---|---|
-| `ruby-gem-*` | Semver bump, `.gemspec` build, attach to GitHub Release, push to GitHub Packages — plus the shared Ruby quality gates (rubocop, codequality, coverage, docs) that any Ruby consumer wires up | `fluence-gateway-client`, `fluence-gateway-auth-ruby`, `guardian-ci`, `mosaic-sdk` (release flow) + `gateway-back`, `ledger-back` (quality gates only) |
-| `app-*` | Timestamp tag, git-cliff changelog auto-merged on the working branch, force-push mirror to `main` | `gateway-back`, `ledger-back` |
-| `rails-*` | Rails-app-specific checks (brakeman, bundler-audit, ruby-audit) | `gateway-back`, `ledger-back` |
-| `vue-app-*` | Vue / Node frontend gates (`vue-tsc`, `eslint`, `prettier`, `vitest`) with sticky-comment diff vs baseline | `vision-front`, `fluence-gateway-auth-vue` |
-| `npm-*` | Semver bump (mono or multi-package), `npm install --package-lock-only`, auto-merged release PR, tag + GitHub Release. Mirror of the `ruby-gem-*` release flow for npm packages on GitHub Packages | `fluence-gateway-auth-vue` |
-| `claude-*` | Language-agnostic AI gates backed by `anthropics/claude-code-action` against a Pro/Max OAuth token | (any consumer) |
+| Prefix | Pattern |
+|---|---|
+| `ruby-gem-*` | Semver or dated bump, `.gemspec` build, attach to GitHub Release, push to GitHub Packages and rubygems.org — plus the shared Ruby quality gates (rubocop, codequality, coverage, docs) that any Ruby consumer wires up |
+| `app-*` | Timestamp tag, git-cliff changelog auto-merged on the working branch, force-push mirror to `main` |
+| `rails-*` | Rails-app-specific checks (brakeman, bundler-audit, ruby-audit) |
+| `vue-app-*` | Vue / Node frontend gates (`vue-tsc`, `eslint`, `prettier`, `vitest`) with sticky-comment diff vs baseline |
+| `npm-*` | Semver bump (mono or multi-package), `npm install --package-lock-only`, auto-merged release PR, tag + GitHub Release. Mirror of the `ruby-gem-*` release flow for npm packages on GitHub Packages |
+| `claude-*` | Language-agnostic AI gates backed by `anthropics/claude-code-action` against a Pro/Max OAuth token |
 
 For contributor guidelines and design principles, see [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+---
+
+## Using these workflows outside fluence-eu
+
+Most reusables only depend on the secret and variable names listed in [Required repo config](#required-repo-config): create your own GitHub Apps and store their credentials under those names. A few hard-code the organisation and need a fork:
+
+- `ruby-gem-publish.yml` pushes to the `fluence-eu` GitHub Packages registry.
+- `*-deps-bump.yml` reads private changelogs with a token minted for the `fluence-eu` owner, and `deps-merge.yml` only acts on PRs authored by `fluence-deps[bot]`.
+- `claude-review-specialists.yml` installs its plugins from `fluence-eu/claude-config`, a private marketplace.
+
+The nested references inside the reusables point at `@v7` too, so pinning a commit SHA freezes the workflow you call, not the composite actions it runs.
 
 ---
 
@@ -60,7 +72,7 @@ The review is incremental across runs. The first run is exhaustive (every findin
 | Central workflow | Consumer file | Trigger | Mode | Role |
 |---|---|---|---|---|
 | `claude-review-pr.yml` | `claude-review-pr.yml` | `pull_request` | advisory | Sticky summary + inline review comments via `anthropics/claude-code-action@v1`. Never fails the PR — Claude is one reviewer among others, not a gate. |
-| `claude-review-specialists.yml` | `claude-review.yml` | `pull_request` | advisory | Runs `/review:pr --mode ci` from the `review@fluence` plugin ([claude-config](https://github.com/fluence-eu/claude-config)): correctness and security reviewers in parallel, an independent verifier, one GitHub review (COMMENT). The full set of reviewers runs locally before the PR. A failed run shows red instead of being masked. Requires `FLUENCE_RELEASE_BOT_PRIVATE_KEY` (read token on claude-config) and `style@fluence` + `review@fluence` enabled in the consumer's `.claude/settings.json`. |
+| `claude-review-specialists.yml` | `claude-review.yml` | `pull_request` | advisory | Runs `/review:pr --mode ci` from the `review@fluence` plugin (private `fluence-eu/claude-config` marketplace): correctness and security reviewers in parallel, an independent verifier, one GitHub review (COMMENT). The full set of reviewers runs locally before the PR. A failed run shows red instead of being masked. Requires `FLUENCE_RELEASE_BOT_PRIVATE_KEY` (read token on claude-config) and `style@fluence` + `review@fluence` enabled in the consumer's `.claude/settings.json`. |
 
 Minimal consumer:
 
@@ -108,7 +120,7 @@ jobs:
 
 ## Per-project configuration: `.fluence-ci.yml`
 
-Since `@v6`, per-project options live in a `.fluence-ci.yml` file at the consumer repo's root — not in `with:` blocks. Wrapper workflows are byte-identical across the repos of a family (verified by the [repos-status](https://github.com/fluence-eu/repos-status) dashboard); `workflow_call` inputs are reserved for runtime values (`bump`, `tag`) and internal wiring (`measure_workflow_file`).
+Since `@v6`, per-project options live in a `.fluence-ci.yml` file at the consumer repo's root — not in `with:` blocks. Wrapper workflows are byte-identical across the repos of a family; `workflow_call` inputs are reserved for runtime values (`bump`, `tag`) and internal wiring (`measure_workflow_file`).
 
 Every key is optional unless noted — omitted keys fall back to the defaults shown:
 
@@ -740,21 +752,19 @@ Without the app install, the runtime call to `actions/create-github-app-token` r
 
 PR-side reusables (`ruby-gem-rubocop-pr`, `ruby-gem-coverage-pr`, `ruby-gem-codequality-pr`, `rails-security-pr`, `ruby-gem-docs-pr`) and their `*-measure` counterparts run `bundle install` then invoke `rubocop`, `reek`, `flog`, `flay`, `brakeman`, `bundler-audit`, `ruby_audit`, `yard`, `yardstick`, `simplecov`, `undercover`. The consumer repo must therefore ship those tools in its bundle.
 
-Add the [`guardian-ci`](https://github.com/fluence-eu/guardian-ci) meta-gem to the `Gemfile`:
+Add the [`guardian-ci`](https://github.com/fluence-eu/guardian-ci) meta-gem, published on rubygems.org, to the `Gemfile`:
 
 ```ruby
-source 'https://rubygems.pkg.github.com/fluence-eu' do
-  gem 'guardian-ci', require: false
-end
+gem 'guardian-ci', require: false
 ```
 
 It pulls in all the tools above with the version pins the centralised workflows expect. Bumping a tool is `bundle update guardian-ci`.
 
-Because `guardian-ci` lives on GitHub Packages (private), each consumer workflow that runs `bundle install` must:
+When the bundle also pulls private gems from GitHub Packages, each consumer workflow that runs `bundle install` must:
 
 - Grant `packages: read` on the calling job's `permissions:` block.
 - Set `BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ secrets.GITHUB_TOKEN }}` as workflow-level env so Bundler can authenticate against the registry.
-- **Be allow-listed on the package itself.** Per-package access is not org-inherited — open each private package's settings (e.g. https://github.com/orgs/fluence-eu/packages/rubygems/package/guardian-ci/settings) → **Manage Actions access** → **Add repository** → select the new consumer repo → Role: **Read**. Repeat for every entry inside the `source 'https://rubygems.pkg.github.com/fluence-eu' do … end` block of the Gemfile (`mosaic-sdk`, `money-fluence-exchange`, `fluence-gateway-auth-ruby`, …). Without this, `bundle install` fails with `authentication is required` even when `packages: read` and the `BUNDLE_…` env var are set correctly.
+- **Be allow-listed on each private package.** Per-package access is not org-inherited — open the package's settings → **Manage Actions access** → **Add repository** → select the new consumer repo → Role: **Read**. Repeat for every entry inside the `source 'https://rubygems.pkg.github.com/<org>' do … end` block of the Gemfile. Without this, `bundle install` fails with `authentication is required` even when `packages: read` and the `BUNDLE_…` env var are set correctly.
 
 The reusables in this repo already declare `packages: read` at the workflow level — consumers just need to forward the permission via their wrapper (see the templates above).
 

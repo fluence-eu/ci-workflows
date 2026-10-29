@@ -101,7 +101,7 @@ GitHub auto-generates nice step display names from each action's `action.yml` me
 
 `workflow_call` inputs are reserved for **runtime values** (`bump` from a dispatch choice, `tag` from a release event) and **internal wiring** (`measure_workflow_file`). Anything that varies per project — Ruby/Node versions, tool commands, gem/package specs, branch names — is read from the consumer's `.fluence-ci.yml` via the `actions/read-config` composite action, right after the consumer checkout.
 
-This keeps consumer wrapper files byte-identical across the repos of a family (the [repos-status](https://github.com/fluence-eu/repos-status) dashboard enforces it by content comparison). Adding an input that carries a per-project value is a design smell: add a config key instead, with the old default. The full key schema lives in [README.md](./README.md#per-project-configuration-fluence-ciyml).
+This keeps consumer wrapper files byte-identical across the repos of a family. Adding an input that carries a per-project value is a design smell: add a config key instead, with the old default. The full key schema lives in [README.md](./README.md#per-project-configuration-fluence-ciyml).
 
 ### 7. Helper scripts via composite actions
 
