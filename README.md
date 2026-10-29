@@ -792,3 +792,7 @@ The workflow downloads every `.gem` asset from that release and pushes them. The
 ## Monorepo note
 
 Multi-gem repos release all their gems as one set under a single tag (`release.gem_specs` multiline list), and `ruby-gem-publish.yml` pushes **every** `.gem` asset attached to the release — one `publish.yml` wrapper covers the whole set, no per-gem wiring.
+
+## License
+
+Released under the [MIT License](LICENSE).
