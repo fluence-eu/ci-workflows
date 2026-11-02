@@ -165,6 +165,7 @@ release:
   develop_branch: develop    # app-*
   main_branch: main          # app-release
   tag_format: '%Y.%m.%d.%H%M%S'  # app-prepare-release, ruby-gem-prepare-release (version: date)
+  rubygems_owner: ''         # ruby-gem-publish-rubygems: rubygems.org account ID that owns a gem created by its first push
 ```
 
 The `actions/read-config` composite action resolves these keys inside each reusable, right after the consumer checkout. A missing required key fails the run with an explicit `::error::` naming the key.
@@ -351,7 +352,7 @@ jobs:
       packages: write
 ```
 
-A public gem also published to rubygems.org adds a second wrapper, granting `id-token: write` for trusted publishing. Its rubygems.org trusted publisher names the consumer repo, the workflow `ruby-gem-publish-rubygems.yml` and the workflow repository `fluence-eu/ci-workflows`. Before the first release the gem doesn't exist yet, so this is a *pending* publisher created from your rubygems.org profile; it is only valid for about 12 hours, so create it right before releasing. The gemspec must not set `allowed_push_host`, which restricts `gem push` to a single registry.
+A public gem also published to rubygems.org adds a second wrapper, granting `id-token: write` for trusted publishing. Its rubygems.org trusted publisher names the consumer repo, the workflow `ruby-gem-publish-rubygems.yml` and the workflow repository `fluence-eu/ci-workflows`. Before the first release the gem doesn't exist yet, so this is a *pending* publisher created from your rubygems.org profile; it is only valid for about 12 hours, so create it right before releasing. rubygems.org only creates the gem when the workflow names its owner: set `release.rubygems_owner` in `.fluence-ci.yml` to the account ID shown on the Pending Trusted Publishers page, and leave it empty for a gem that already exists. The gemspec must not set `allowed_push_host`, which restricts `gem push` to a single registry.
 
 ```yaml
 # .github/workflows/publish-rubygems.yml
