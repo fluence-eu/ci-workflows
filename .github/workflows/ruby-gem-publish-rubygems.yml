@@ -69,7 +69,37 @@ jobs:
           echo "::error::Could not download *.gem from release ${TAG} after 5 attempts"
           exit 1
 
+      - name: Read .fluence-ci.yml
+        id: cfg
+        uses: fluence-eu/ci-workflows/actions/read-config@v7
+        with:
+          keys: |
+            rubygems_owner=release.rubygems_owner=
+
       - uses: rubygems/configure-rubygems-credentials@v2.1.0
+        if: fromJSON(steps.cfg.outputs.values).rubygems_owner == ''
+
+      # rubygems.org only creates a gem when the exchange names its owner, and
+      # the action above still posts the JWT alone. Back to it once it has an
+      # `owner` input.
+      - name: Exchange the OIDC token, naming the gem's owner
+        if: fromJSON(steps.cfg.outputs.values).rubygems_owner != ''
+        env:
+          OWNER: ${{ fromJSON(steps.cfg.outputs.values).rubygems_owner }}
+        run: |
+          set -euo pipefail
+          jwt=$(curl --fail-with-body --silent --show-error \
+            --header "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=rubygems.org" | jq --raw-output .value)
+          echo "::add-mask::$jwt"
+          response=$(jq --null-input --arg jwt "$jwt" --arg owner "$OWNER" '{jwt: $jwt, owner: $owner}' \
+            | curl --fail-with-body --silent --show-error \
+                --header 'Content-Type: application/json' --header 'Accept: application/json' \
+                --data @- https://rubygems.org/api/v1/oidc/trusted_publisher/exchange_token) \
+            || { echo "::error::$response"; exit 1; }
+          key=$(jq --raw-output .rubygems_api_key <<< "$response")
+          echo "::add-mask::$key"
+          echo "GEM_HOST_API_KEY=$key" >> "$GITHUB_ENV"
 
       - name: Push every downloaded gem to RubyGems.org
         run: |
