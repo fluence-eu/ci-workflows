@@ -104,7 +104,7 @@ jobs:
 
 | Central workflow | Consumer file | Trigger | Role |
 |---|---|---|---|
-| `rails-deps-bump.yml` | `deps-bump.yml` | `workflow_dispatch` | Claude groups the outdated gems, bumps each group with its migration on a `deps/<slug>/<stamp>` PR authored by `fluence-deps[bot]`, then fixes what the app's PR checks report (2 attempts). Deletes branches of closed deps PRs. |
+| `rails-deps-bump.yml` | `deps-bump.yml` | `workflow_dispatch` | Claude groups the outdated gems, bumps each group with its migration on a `deps/<slug>/<stamp>` PR authored by `fluence-deps[bot]`, then fixes what the app's PR checks report (2 attempts). Deletes branches of closed deps PRs. A Rails minor or major moves one release line per run and follows the upgrade procedure: official guide, `bin/rails app:update`, comparison with a pristine `rails new`, `config.load_defaults` on the target, production boot compared before and after. |
 | `ruby-gem-deps-bump.yml` | `deps-bump.yml` | `workflow_dispatch` | Same as `rails-deps-bump.yml` for gems: no database; a runtime dependency's gemspec constraint only moves when the target requires it, flagged in the PR body. |
 | `vue-app-deps-bump.yml` | `deps-bump.yml` | `workflow_dispatch` | Same for Vue apps: `npm outdated`, `npm install <package>@<target>`, Node and private registries set up like the other vue-app-* workflows (optional `NPMRC_AUTH`). |
 | `npm-deps-bump.yml` | `deps-bump.yml` | `workflow_dispatch` | Same for npm packages: workspaces monorepos supported (a dependency is bumped in every workspace declaring it); a `peerDependencies` range only widens when the target requires it, flagged in the PR body; Node defaults to 22 like the other npm-* workflows. |
