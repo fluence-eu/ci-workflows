@@ -99,6 +99,8 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         env:
           GH_TOKEN: ${{ github.token }}
+          # In the background, reviewers outlive the first result, which ends the job.
+          CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: 1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: https://x-access-token:${{ steps.marketplace.outputs.token }}@github.com/fluence-eu/claude-config.git
@@ -109,3 +111,18 @@ jobs:
           claude_args: |
             --max-turns 60
             --allowedTools "Agent,Read,Grep,Glob,Bash(git diff:*),Bash(git show:*),Bash(git log:*),Bash(git merge-base:*),Bash(git rev-parse:*),Bash(gh pr view:*),Bash(gh api:*)"
+
+      # The action ends green even when Claude stops before publishing.
+      - name: Check that a review was published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          published=$(gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" --paginate \
+            --jq '.[] | select(.commit_id == env.HEAD_SHA and (.body | contains("<!-- review-published -->"))) | .id')
+          if [ -z "$published" ]; then
+            echo "::error::No review published for $HEAD_SHA."
+            exit 1
+          fi
