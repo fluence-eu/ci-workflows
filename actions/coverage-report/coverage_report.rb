@@ -30,7 +30,7 @@ if File.exist?(undercover_path)
     adapter = File.open(undercover_path) do |file|
       Undercover::SimplecovResultAdapter.parse(file, opts)
     end
-    changeset = Undercover::Changeset.new(File.join(opts.path, opts.git_dir), opts.compare)
+    changeset = Undercover::Changeset.new(opts.git_dir, opts.compare)
     report = Undercover::Report.new(changeset, opts, adapter).build
     undercover_flagged = report.flagged_results
   rescue StandardError => e
